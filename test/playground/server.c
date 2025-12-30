@@ -15,10 +15,16 @@
 #include <arpa/inet.h>
 #include <sys/wait.h>
 #include <signal.h>
+#include <pthread.h>
 
-#define PORT "3490"  // the port users will be connecting to
+#define PORT "9090"  // the port users will be connecting to
 
 #define BACKLOG 10   // how many pending connections queue will hold
+
+
+void* handle_player(void* arg) {
+	printf("Handling player... value = %d", *((int*)(arg)));
+}
 
 
 
@@ -31,6 +37,9 @@ void *get_in_addr(struct sockaddr *sa)
     return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
 
+
+/* ************************************************** */
+
 int main(int argc, char* argv[]) {
 
 	int sockfd, new_fd;
@@ -42,15 +51,33 @@ int main(int argc, char* argv[]) {
 	int err;
 
 	memset(&hints, 0, sizeof(hints));
-	hints.ai_family = AF_UNSPEC;
+	hints.ai_family = AF_INET;
 	hints.ai_socktype = SOCK_STREAM;
 	hints.ai_flags = AI_PASSIVE;
 
 	if(err = getaddrinfo(NULL, PORT, &hints, &serverInfo) != 0)
         fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(err));
 
+
+
+
+	//
+	// MAKING 4 WORKER THREADS
+	//
+	pthread_t threads[4];
+	int* pval = (int*)malloc(sizeof(int));
+	*pval = 5; 
+	for(int i = 0; i < 4; i++) {
+		if(pthread_create(&threads[i], NULL, handle_player, pval) != 0) {
+			perror("pthread: error in pthread_create ");
+		}
+	}
+	//
+
+
+
 	for(it = serverInfo; it != NULL; it = it->ai_next) {
-		if(sockfd = socket(it->ai_family, it->ai_socktype, it->ai_protocol) == -1) {
+		if((sockfd = socket(it->ai_family, it->ai_socktype, it->ai_protocol) ) == -1) {
 			perror("server: socket");
 			continue;
 		}
@@ -88,7 +115,7 @@ int main(int argc, char* argv[]) {
 		}
 
 		char *buff[1024];
-		char s[INET6_ADDRSTRLEN];
+		char s[INET_ADDRSTRLEN];
 
 		inet_ntop(
 			their_addr.ss_family, 
@@ -96,6 +123,8 @@ int main(int argc, char* argv[]) {
 			s, 
 			sizeof(s)
 		);
+
+		printf("server: got connection from %s\n", s);
 
 		if (!fork()) { // this is the child process
             close(sockfd); // child doesn't need the listener
@@ -107,29 +136,12 @@ int main(int argc, char* argv[]) {
         close(new_fd);  // parent doesn't need this
     }
 
+
+	for(int i = 0; i < 4; i++) {
+    	pthread_join(threads[i], NULL);
+	}
 	return 0;
 	
 	
 }
 
-
-io mi trovo con la vostra visione che l'ai sia qualcosa da
---- LA PROGETTAZIONE NON SARà RIMPIAZZATA
-// BASE 44
-// Colloqui di lavoro
-	- IA vietata
-	- GOOGLE assume gente 
-
-// esistono percorsi fondazionali
-// esostono degli strumentui
-// la IA non è dalla sua integrazione ontologica un percorso fondamentale
-// l'intento e ciò che possiamo produrre partendo dalle nostra fondazione concettuale
-// l'intento e cio che supporta la assosciazione empresariale tra io e il cliente
-// gli strumenti sono in particolare ponti per perfezionare le fondazioni (tu giochi con la calcolatrice, fai lo script in manim, interroghi la IA, tu giochi con uno strumento in funzione di migliorare le fondamenta)
-// |- non aprofondisci l'IA, giocandoci mentre aprofondisci le fondazioni.
-
-// la produzione e un altro strumento (impari facendo)
-
-// la differenza tra l'IA e te e che tu ti puoi interessare per un unica cosa, focalizzare l'intento. La IA al momento no. La IA non puo contribuire
-// quando la IA si possa simulare l' osessionare per una cosa, non ci rimarrà niente
-// per contribuire ci vuole, imprendimento e fondazione.
