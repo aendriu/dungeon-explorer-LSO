@@ -21,7 +21,6 @@ void init_newplayer(int sockfd) {
 }
 
 
-
 // ******************************************************* //
 
 int main (){
@@ -32,6 +31,7 @@ int main (){
         if(nof_connected_players < MAX_PLAYERS) {
             connect_loop();
             printf("Player %d is connected\n", nof_connected_players + 1);
+            connections[nof_connected_players].player_id = nof_connected_players + 1;
             nof_connected_players+=1;
         } else {
             connect_loop_refuse();   
