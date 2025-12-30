@@ -1,7 +1,12 @@
 #define _POSIX_C_SOURCE 200112L
 #include "header/connection.h"
+#include "header/messages.h"
 
 // ************************************************** //
+
+int welcome_sock = 0;
+bool si_initialized = false;
+struct addrinfo *servinfo = NULL;
 
 void init_servinfo() {
     struct addrinfo hints;
@@ -20,7 +25,7 @@ void init_servinfo() {
 		exit(1);
     }
     si_initialized = true;
-    printf("- servinfo initialized.");
+    printf("- servinfo initialized\n");
 }
 
 // *****
@@ -45,7 +50,6 @@ void sockets_free(Conn* socks, int size) {
 // ************************************************** //
 
 int socket_create() {
-    int status;
     if(!si_initialized) { init_servinfo();}
 
     int sockfd = socket(servinfo->ai_family, servinfo->ai_socktype, servinfo->ai_protocol); 
@@ -79,3 +83,13 @@ void connect_loop() {
     init_newplayer(new_fd);
 }
 
+void connect_loop_refuse() {
+    if(listen(welcome_sock, BACKLOG) == -1) {
+		perror("listen in connect_loop()");
+		exit(1);
+	}
+	struct sockaddr_storage their_addr;
+	socklen_t sin_size = sizeof(their_addr);
+    int new_fd = accept(welcome_sock, (struct sockaddr *)&their_addr,&sin_size);
+    send(new_fd, MSG_MAX_PLAYER_REACHED, 256, 0);
+}

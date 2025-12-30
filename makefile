@@ -1,16 +1,16 @@
 CC=gcc
-CFLAGS=-Wall -Wextra -O2 -g
+CFLAGS=-Wall -Wextra -O2 -g -pthread
 
-SRCDIR=server
-BINARY=$(SRCDIR)/server
-SRC=$(SRCDIR)/main.c
+TARGET=server.out
+SRC=server/src/*.c
+INC=-Iserver
 
-all: $(BINARY)
+all: $(TARGET)
 
-$(BINARY): $(SRC)
-	$(CC) $(CFLAGS) -o $@ $<
+$(TARGET):
+	$(CC) $(CFLAGS) $(INC) -o $(TARGET) $(SRC)
 
 clean:
-	rm -f $(BINARY)
+	rm -f $(TARGET)
 
 .PHONY: all clean

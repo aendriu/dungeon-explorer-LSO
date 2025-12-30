@@ -12,8 +12,9 @@ int nof_connected_players=0;
 
 void init_newplayer(int sockfd) {
     connections[nof_connected_players].sockfd = sockfd;
-    pthread_t tid = pthread_create(NULL, NULL, handle_player, NULL);
-    if(tid != 0) {
+	pthread_t tid;
+	int rc = pthread_create(&tid, NULL, handle_player, NULL);
+	if (rc != 0) {
         perror("pthread_create ERROR in init_newplayer: ");
     }
     connections[nof_connected_players].tid = tid;
@@ -33,7 +34,7 @@ int main (){
             printf("Player %d is connected\n", nof_connected_players + 1);
             nof_connected_players+=1;
         } else {
-
+            connect_loop_refuse();   
         }
     }
 

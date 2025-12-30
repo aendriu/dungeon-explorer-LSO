@@ -1,6 +1,9 @@
 #include "header/player.h"
 
+#include <stdio.h>
+
 void *handle_player(void* args) {
-    printf("Im handling player!");
-    return;
+	(void)args;
+    printf("Im handling player!\n");
+    return NULL;
 }

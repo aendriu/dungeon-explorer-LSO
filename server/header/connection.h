@@ -7,13 +7,16 @@
 #include <netdb.h>
 #include <stdio.h>
 #include <stdbool.h>
+#include <pthread.h>
+#include <stdlib.h>
+#include <unistd.h>
 
 #define PORT "9090"
 #define BACKLOG 10
 
-int welcome_sock = 0;
-bool si_initialized = false;
-struct addrinfo *servinfo; 
+extern int welcome_sock;
+extern bool si_initialized;
+extern struct addrinfo *servinfo;
 
 typedef struct {
     int sockfd;
@@ -28,6 +31,9 @@ void init_welcome_sock();
 int socket_create();
 void socket_bind(int);
 void connect_loop();
+void connect_loop_refuse();
+
+void init_newplayer(int sockfd);
 
 
 void sockets_free(Conn*, int);
