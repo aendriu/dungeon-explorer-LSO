@@ -1,6 +1,6 @@
 #define _POSIX_C_SOURCE 200112L
-#include "header/connection.h"
-#include "header/messages.h"
+#include "../header/connection.h"
+#include "../header/messages.h"
 
 // ************************************************** //
 
@@ -14,6 +14,8 @@ void init_servinfo() {
     hints.ai_family = AF_INET;     
     hints.ai_socktype = SOCK_STREAM; 
     hints.ai_flags = AI_PASSIVE;
+    hints.ai_protocol = IPPROTO_TCP;
+
     
     int status;
     if ((status = getaddrinfo(NULL, PORT, &hints, &servinfo)) != 0) {
@@ -54,7 +56,7 @@ int socket_create() {
 
     int sockfd = socket(servinfo->ai_family, servinfo->ai_socktype, servinfo->ai_protocol); 
     if( sockfd == -1 ) {
-        perror("socket() : ");
+        perror("[SERVER] - socket()");
         exit(1);
     }
     return sockfd;
@@ -66,26 +68,26 @@ void socket_bind(int sockfd) {
     int res = bind(sockfd, servinfo->ai_addr, servinfo->ai_addrlen);
     if(res == -1) {
         close(sockfd);
-        perror("server: bind");
+        perror("[SERVER] - bind()");
     }
 }
 
 // *****
 
-void connect_loop() {
+int listen_loop() {
     if(listen(welcome_sock, BACKLOG) == -1) {
-		perror("listen in connect_loop()");
+		perror("[SERVER] - listen in connect_loop()");
 		exit(1);
 	}
 	struct sockaddr_storage their_addr;
 	socklen_t sin_size = sizeof(their_addr);
-    int new_fd = accept(welcome_sock, (struct sockaddr *)&their_addr,&sin_size);
-    init_newplayer(new_fd);
+    int new_sockfd = accept(welcome_sock, (struct sockaddr *)&their_addr,&sin_size);
+    return new_sockfd;
 }
 
-void connect_loop_refuse() {
+void listen_loop_refuse() {
     if(listen(welcome_sock, BACKLOG) == -1) {
-		perror("listen in connect_loop()");
+		perror("[SERVER] - listen in connect_loop()");
 		exit(1);
 	}
 	struct sockaddr_storage their_addr;
@@ -93,3 +95,6 @@ void connect_loop_refuse() {
     int new_fd = accept(welcome_sock, (struct sockaddr *)&their_addr,&sin_size);
     send(new_fd, MSG_MAX_PLAYER_REACHED, 256, 0);
 }
+
+
+

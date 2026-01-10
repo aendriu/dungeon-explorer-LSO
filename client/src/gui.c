@@ -1,8 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include "header/color.h"
-#include "header/gui.h"
+#include "../header/color.h"
+#include "../header/gui.h"
 
 
 void print_line(char c, int n) {

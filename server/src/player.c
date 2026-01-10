@@ -1,14 +1,28 @@
-#include "header/player.h"
+#include "../header/player.h"
 
-#include <stdio.h>
+// player id sequence
+int plid_seq=0;
 
-const char* pl_1_symbol = "1";
-const char* pl_2_symbol = "2";
-const char* pl_3_symbol = "3";
-const char* pl_4_symbol = "4";
+// *****
+
+void init_newplayer(int sockfd, Conn* connections) {
+    pthread_t tid;
+	int rc = pthread_create(&tid, NULL, handle_player, NULL);
+	if (rc != 0) {
+        perror("pthread_create ERROR in init_newplayer: ");
+    }
+    connections[plid_seq].sockfd = sockfd;
+    connections[plid_seq].tid = tid;
+    connections[plid_seq].player_id = plid_seq;
+    plid_seq+=1;
+}
+
+// *****
 
 void *handle_player(void* args) {
 	(void)args;
     printf("Im handling player!\n");
     return NULL;
 }
+
+

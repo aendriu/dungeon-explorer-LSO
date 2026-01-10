@@ -1,40 +1,39 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
-#include "header/connection.h"
-#include "header/player.h"
+#include <signal.h>
+
+#include "../header/connection.h"
+#include "../header/player.h"
 
 #define MAX_PLAYERS 4
 
 Conn connections[MAX_PLAYERS] = {0}; 
-int nof_connected_players=0;
 
 
-void init_newplayer(int sockfd) {
-    connections[nof_connected_players].sockfd = sockfd;
-	pthread_t tid;
-	int rc = pthread_create(&tid, NULL, handle_player, NULL);
-	if (rc != 0) {
-        perror("pthread_create ERROR in init_newplayer: ");
-    }
-    connections[nof_connected_players].tid = tid;
+// L'override di questo segnale fa si che quando si preme
+// Cntrl-C, prima di uscire, si chiudano le connessioni.
+void sig_handlr_shutdown(int sig) {
+    printf("Revieved signal %d, shutting down...\n", sig);  
+    freeaddrinfo(servinfo);
+    sockets_free(connections, 4);
+    exit(0);
 }
-
 
 // ******************************************************* //
 
 int main (){
     memset(connections, 0, sizeof(connections));
     init_welcome_sock();
+    signal(SIGINT, sig_handlr_shutdown);
 
     while(true) {
-        if(nof_connected_players < MAX_PLAYERS) {
-            connect_loop();
-            printf("Player %d is connected\n", nof_connected_players + 1);
-            connections[nof_connected_players].player_id = nof_connected_players + 1;
-            nof_connected_players+=1;
+        if(plid_seq < MAX_PLAYERS) {
+            int player_sockfd = listen_loop();
+            init_newplayer(player_sockfd, connections);
+            printf("Player %d is connected\n", plid_seq);
         } else {
-            connect_loop_refuse();   
+            listen_loop_refuse();   
         }
     }
 

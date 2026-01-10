@@ -25,17 +25,19 @@ typedef struct {
 } Conn;
 
 
-
+// initializations
 void init_servinfo();
 void init_welcome_sock();
+
+// sockets
 int socket_create();
 void socket_bind(int);
-void connect_loop();
-void connect_loop_refuse();
 
-void init_newplayer(int sockfd);
+// listen
+int listen_loop();
+void listen_loop_refuse();
 
-
+//free
 void sockets_free(Conn*, int);
 
 
