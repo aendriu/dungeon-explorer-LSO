@@ -1,10 +1,14 @@
 #ifndef GUI
 #define GUI
 
-#define H_SIZE 58
-#define V_SIZE 32
+#include <ncurses.h>
+#include "header/types.h"
 
-void print_line(char c, int n);
-void welcome_print();
+#include <stddef.h>
+
+void init_ncurses();
+UserChoice welcome_menu();
+
+int prompt_server_address(char *host, size_t host_sz, char *port, size_t port_sz);
 
 #endif

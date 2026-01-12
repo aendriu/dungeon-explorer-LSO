@@ -15,7 +15,7 @@ $(SERVER_OUT):
 	$(CC) $(CFLAGS) $(SERVER_INC) -o $(SERVER_OUT) $(SERVER_SRC)
 
 $(CLIENT_OUT):
-	$(CC) -Wall -Wextra -O2 -g $(CLIENT_INC) -o $(CLIENT_OUT) $(CLIENT_SRC)
+	$(CC) -Wall -Wextra -O2 -g $(CLIENT_INC) -o $(CLIENT_OUT) $(CLIENT_SRC) -lncurses
 
 clean:
 	rm -f $(SERVER_OUT) $(CLIENT_OUT)

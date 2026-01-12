@@ -17,9 +17,6 @@
 
 extern int sock;
 extern struct addrinfo *servinfo;
-
-void init_servinfo();
-void socket_create();
-void connect_to_server();
+int connect_to_server(const char *host, const char *port);
 
 #endif

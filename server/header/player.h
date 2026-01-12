@@ -1,9 +1,9 @@
 #ifndef PLAYER
 #define PLAYER
 
-#include "../header/connection.h"
 #include <stdio.h>
 #include <pthread.h>
+#include "../header/connection.h"
 
 #define PL_1_SYMBOL  "1"
 #define PL_2_SYMBOL  "2"
