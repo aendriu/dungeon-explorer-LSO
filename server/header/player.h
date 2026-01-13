@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <pthread.h>
 #include "../header/connection.h"
+#include "../header/messages.h"
 
 #define PL_1_SYMBOL  "1"
 #define PL_2_SYMBOL  "2"

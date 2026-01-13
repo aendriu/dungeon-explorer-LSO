@@ -93,7 +93,13 @@ void listen_loop_refuse() {
 	struct sockaddr_storage their_addr;
 	socklen_t sin_size = sizeof(their_addr);
     int new_fd = accept(welcome_sock, (struct sockaddr *)&their_addr,&sin_size);
-    send(new_fd, MSG_MAX_PLAYER_REACHED, 256, 0);
+    if (new_fd != -1) {
+        char frame[256];
+        memset(frame, 0, sizeof(frame));
+        strncpy(frame, MSG_MAX_PLAYER_REACHED, sizeof(frame) - 1);
+        send(new_fd, frame, sizeof(frame), 0);
+        close(new_fd);
+    }
 }
 
 

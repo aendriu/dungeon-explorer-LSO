@@ -7,18 +7,26 @@
 #include "../header/types.h"
 #include "../header/connection.h"
 #include "../header/gui.h"
+#include "../header/protocol.h"
+#include "../header/messages.h"
 
 
-int manage_choice(UserChoice choice);
+static int manage_choice(UserChoice *state);
+
+UserChoice choice;
 
 int main() {
     signal(SIGINT, sig_handlr_shutdown);
 
     while (1) {
-        UserChoice choice = welcome_menu();
-        if (manage_choice(choice) < 0) {
+        if (choice == MENU_ENTERLOBBY || choice == MENU_QUIT) {
+            choice = welcome_menu();
+        }
+
+        if (manage_choice(&choice) < 0) {
             break;
         }
+        
     }
     
     
@@ -34,12 +42,11 @@ int main() {
     return 0;
 }
 
-// *****
-
-int manage_choice(UserChoice choice) {
-    switch (choice)
+static int manage_choice(UserChoice *state) {
+    switch (*state)
     {
     case MENU_ENTERLOBBY:
+    {
         char host[256] = {0};
         char port[32] = {0};
 
@@ -48,20 +55,28 @@ int manage_choice(UserChoice choice) {
         }
 
         if (connect_to_server(host, port) == 0) {
-            printf("Connected to %s:%s\n", host, port);
+            *state = TO_LOBBY;
         } else {
             printf("Failed to connect to %s:%s\n", host, port);
+            getchar();
         }
-        getchar();
-        break;
+        return 0;
+    }
     
-    
+    case TO_LOBBY:
+    {
+        if (lobby_screen() < 0) {
+            *state = MENU_ENTERLOBBY;
+        }
+        return 0;
+    }
+
     case MENU_QUIT:
         return -1;
     
     default:
         break;
     }
-
+    
     return 0;
 }

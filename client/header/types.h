@@ -3,7 +3,8 @@
 
 typedef enum {
     MENU_ENTERLOBBY,
-    MENU_QUIT
+    MENU_QUIT,
+    TO_LOBBY
 } UserChoice;
 
 #endif
