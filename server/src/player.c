@@ -1,8 +1,3 @@
-#include <errno.h>
-#include <string.h>
-#include <sys/socket.h>
-#include <unistd.h>
-
 #include "../header/player.h"
 
 // player id sequence
@@ -29,6 +24,15 @@ void init_newplayer(int sockfd, Conn *connections) {
 
 // *****
 
+void manage_response(char *recieved, char *response, size_t res_len) {
+  if (strcmp(recieved, SEND_N_OF_CONNECTED_PLAYERS) == 0) {
+    /* plid_seq is the current number of connected players (0..MAX_PLAYERS) */
+    snprintf(response, res_len, "%d", plid_seq);
+  } else {
+    snprintf(response, res_len, "OK");
+  }
+}
+
 void *handle_player(void *args) {
   Conn *myconn = (Conn *)args;
   printf("Im handling player!\n");
@@ -52,13 +56,7 @@ void *handle_player(void *args) {
       }
     }
 
-    if (strncmp(msg, SEND_N_OF_CONNECTED_PLAYERS,
-                strlen(SEND_N_OF_CONNECTED_PLAYERS)) == 0) {
-      /* plid_seq is the current number of connected players (0..MAX_PLAYERS) */
-      snprintf(response, sizeof(response), "%d", plid_seq);
-    } else {
-      strncpy(response, "OK", sizeof(response) - 1);
-    }
+    manage_response(msg, response, FRAME_SIZE);
 
     if (send(myconn->sockfd, response, sizeof(response), 0) < 0) {
       break;
