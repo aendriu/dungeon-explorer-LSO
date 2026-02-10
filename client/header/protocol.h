@@ -3,16 +3,16 @@
 
 /*
  * Sends a request message to the server on the already-connected socket
- * Sends a request message to the server on the already-connected socket
  * and waits for a single reply.
  *
  * Returns a heap-allocated NUL-terminated string containing the reply,
  * or NULL on error/timeout.
  *
- * Caller must free() the returned pointer.
- */
+ * Caller must free
+
+*/
+
 #include <errno.h>
-#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -21,7 +21,9 @@
 #include <unistd.h>
 
 #include "../header/connection.h"
+#include "../../utils/enums.h"
 
-char *sendnrecv(const char *msg);
+char *sendnrecv(Message msg);
+char *sendnrecv_payload(Message msg, const char *payload_json);
 
 #endif

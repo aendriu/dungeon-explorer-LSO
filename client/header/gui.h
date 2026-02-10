@@ -10,10 +10,9 @@
 #include <unistd.h>
 
 #include "../header/connection.h"
-#include "../header/messages.h"
+#include "../../utils/enums.h"
 #include "../header/mysignals.h"
 #include "../header/protocol.h"
-#include "../header/types.h"
 
 void init_ncurses();
 UserChoice welcome_menu();

@@ -1,9 +1,7 @@
 #include "../header/connection.h"
 #include "../header/gui.h"
-#include "../header/messages.h"
 #include "../header/mysignals.h"
 #include "../header/protocol.h"
-#include "../header/types.h"
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,6 +12,7 @@ static int manage_choice(UserChoice *state);
 UserChoice choice;
 
 int main() {
+  init_ncurses();
   signal(SIGINT, sig_handlr_shutdown);
 
   while (1) {
@@ -35,6 +34,7 @@ int main() {
     servinfo = NULL;
   }
 
+  endwin();
   return 0;
 }
 
