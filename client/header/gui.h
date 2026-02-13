@@ -10,19 +10,12 @@
 #include <unistd.h>
 
 #include "../header/connection.h"
+#include "../header/game_state.h"
 #include "../../utils/enums.h"
 #include "../header/mysignals.h"
 #include "../header/protocol.h"
 
-typedef struct {
-  int map_size;
-  int current_room;
-  int player_id;
-  int **adj;
-  int *players;
-  int *pos_y;
-  int *pos_x;
-} GameState;
+extern int start_y, start_x;
 
 void init_ncurses();
 UserChoice welcome_menu();

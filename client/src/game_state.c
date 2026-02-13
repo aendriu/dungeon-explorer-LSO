@@ -1,0 +1,170 @@
+#include "../header/game_state.h"
+#include "cJSON.h"
+#include <stdlib.h>
+#include <string.h>
+
+void free_game_state(GameState *state) {
+  if (state == NULL)
+    return;
+  if (state->adj != NULL) {
+    for (int i = 0; i < state->map_size; i++) {
+      free(state->adj[i]);
+    }
+    free(state->adj);
+  }
+  free(state->players);
+  free(state->pos_y);
+  free(state->pos_x);
+  state->adj = NULL;
+  state->players = NULL;
+  state->pos_y = NULL;
+  state->pos_x = NULL;
+  state->map_size = 0;
+  state->current_room = 0;
+  state->player_id = -1;
+}
+
+int parse_game_state(const char *json, GameState *state, char *err_buf,
+                     size_t err_len) {
+  if (json == NULL || state == NULL)
+    return -1;
+
+  memset(state, 0, sizeof(GameState));
+
+  cJSON *root = cJSON_Parse(json);
+  if (root == NULL)
+    return -1;
+
+  cJSON *err = cJSON_GetObjectItemCaseSensitive(root, "error");
+  if (cJSON_IsString(err) && err_buf != NULL && err_len > 0) {
+    strncpy(err_buf, err->valuestring, err_len - 1);
+    err_buf[err_len - 1] = '\0';
+  }
+
+  cJSON *map_size = cJSON_GetObjectItemCaseSensitive(root, "map_size");
+  cJSON *current_room = cJSON_GetObjectItemCaseSensitive(root, "current_room");
+  cJSON *player_id = cJSON_GetObjectItemCaseSensitive(root, "player_id");
+  cJSON *players = cJSON_GetObjectItemCaseSensitive(root, "players");
+  cJSON *pos = cJSON_GetObjectItemCaseSensitive(root, "pos");
+  cJSON *adj = cJSON_GetObjectItemCaseSensitive(root, "adj");
+
+  if (!cJSON_IsNumber(map_size) || !cJSON_IsNumber(current_room) ||
+      !cJSON_IsNumber(player_id) || !cJSON_IsArray(players) ||
+      !cJSON_IsArray(adj)) {
+    cJSON_Delete(root);
+    return -1;
+  }
+
+  int size = map_size->valueint;
+  if (size <= 0 || size > 64) {
+    cJSON_Delete(root);
+    return -1;
+  }
+
+  state->map_size = size;
+  state->current_room = current_room->valueint;
+  state->player_id = player_id->valueint;
+  state->adj = (int **)calloc(size, sizeof(int *));
+  if (state->adj == NULL) {
+    cJSON_Delete(root);
+    free_game_state(state);
+    return -1;
+  }
+
+  for (int i = 0; i < size; i++) {
+    state->adj[i] = (int *)calloc(size, sizeof(int));
+    if (state->adj[i] == NULL) {
+      cJSON_Delete(root);
+      free_game_state(state);
+      return -1;
+    }
+  }
+
+  int rows = cJSON_GetArraySize(adj);
+  for (int i = 0; i < rows && i < size; i++) {
+    cJSON *row = cJSON_GetArrayItem(adj, i);
+    if (!cJSON_IsArray(row))
+      continue;
+    int cols = cJSON_GetArraySize(row);
+    for (int j = 0; j < cols && j < size; j++) {
+      cJSON *cell = cJSON_GetArrayItem(row, j);
+      if (cJSON_IsNumber(cell)) {
+        state->adj[i][j] = cell->valueint ? 1 : 0;
+      }
+    }
+  }
+
+  int pcount = cJSON_GetArraySize(players);
+  state->players = (int *)calloc(MAX_PLAYERS, sizeof(int));
+  if (state->players == NULL) {
+    cJSON_Delete(root);
+    free_game_state(state);
+    return -1;
+  }
+  for (int i = 0; i < MAX_PLAYERS; i++) {
+    state->players[i] = -1;
+  }
+  for (int i = 0; i < pcount && i < MAX_PLAYERS; i++) {
+    cJSON *p = cJSON_GetArrayItem(players, i);
+    if (cJSON_IsNumber(p)) {
+      state->players[i] = p->valueint;
+    } else {
+      state->players[i] = -1;
+    }
+  }
+
+  state->pos_y = (int *)calloc(MAX_PLAYERS, sizeof(int));
+  state->pos_x = (int *)calloc(MAX_PLAYERS, sizeof(int));
+  if (state->pos_y == NULL || state->pos_x == NULL) {
+    cJSON_Delete(root);
+    free_game_state(state);
+    return -1;
+  }
+  for (int i = 0; i < MAX_PLAYERS; i++) {
+    state->pos_y[i] = -1;
+    state->pos_x[i] = -1;
+  }
+
+  if (cJSON_IsArray(pos)) {
+    int pos_count = cJSON_GetArraySize(pos);
+    for (int i = 0; i < pos_count && i < MAX_PLAYERS; i++) {
+      cJSON *pair = cJSON_GetArrayItem(pos, i);
+      if (!cJSON_IsArray(pair))
+        continue;
+      cJSON *py = cJSON_GetArrayItem(pair, 0);
+      cJSON *px = cJSON_GetArrayItem(pair, 1);
+      if (cJSON_IsNumber(py) && cJSON_IsNumber(px)) {
+        state->pos_y[i] = py->valueint;
+        state->pos_x[i] = px->valueint;
+      }
+    }
+  }
+
+  cJSON_Delete(root);
+  return 0;
+}
+
+void get_adjacent_rooms(const GameState *state, int *neighbors, int *count) {
+  *count = 0;
+  if (!state || !state->adj)
+    return;
+  for (int i = 0; i < state->map_size; i++) {
+    if (state->adj[state->current_room][i]) {
+      neighbors[*count] = i;
+      (*count)++;
+      if (*count >= 4)
+        break;
+    }
+  }
+}
+
+int door_target_for_dir(const GameState *state, int dir) {
+  int neighbors[4] = {-1, -1, -1, -1};
+  int count = 0;
+  get_adjacent_rooms(state, neighbors, &count);
+  if (dir < 0 || dir > 3)
+    return -1;
+  if (dir >= count)
+    return -1;
+  return neighbors[dir];
+}
