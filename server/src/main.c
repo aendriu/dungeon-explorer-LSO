@@ -6,8 +6,6 @@
 #include "../header/connection.h"
 #include "../header/player.h"
 
-#define MAX_PLAYERS 4
-
 Conn connections[MAX_PLAYERS] = {0}; 
 
 
@@ -28,10 +26,10 @@ int main (){
     signal(SIGINT, sig_handlr_shutdown);
 
     while(true) {
-        if(plid_seq < MAX_PLAYERS) {
+        if(get_connected_players() < MAX_PLAYERS) {
             int player_sockfd = listen_loop();
             init_newplayer(player_sockfd, connections);
-            printf("Player %d is connected\n", plid_seq);
+            printf("Players connected: %d\n", get_connected_players());
         } else {
             listen_loop_refuse();   
         }

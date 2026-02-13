@@ -1,9 +1,15 @@
 #define _POSIX_C_SOURCE 200112L
 #include "../header/connection.h"
-#include "../header/messages.h"
+#include <arpa/inet.h>
+#include <ifaddrs.h>
+#include <netinet/in.h>
 
 // ************************************************** //
 
+static const char *MSG_MAX_PLAYER_REACHED =
+    "The maximum player capacity has been reached!";
+/*
+*/
 int welcome_sock = 0;
 bool si_initialized = false;
 struct addrinfo *servinfo = NULL;
@@ -37,6 +43,10 @@ void init_servinfo() {
 void init_welcome_sock() {
     welcome_sock = socket_create();
     socket_bind(welcome_sock);
+    if(listen(welcome_sock, BACKLOG) == -1) {
+        perror("[SERVER] - listen in init_welcome_sock()");
+        exit(1);
+    }
     printf("- welcome socket initialized\n");
 }
 
@@ -105,10 +115,6 @@ void socket_bind(int sockfd) {
 // *****
 
 int listen_loop() {
-    if(listen(welcome_sock, BACKLOG) == -1) {
-		perror("[SERVER] - listen in connect_loop()");
-		exit(1);
-	}
 	struct sockaddr_storage their_addr;
 	socklen_t sin_size = sizeof(their_addr);
     int new_sockfd = accept(welcome_sock, (struct sockaddr *)&their_addr,&sin_size);
@@ -116,10 +122,6 @@ int listen_loop() {
 }
 
 void listen_loop_refuse() {
-    if(listen(welcome_sock, BACKLOG) == -1) {
-		perror("[SERVER] - listen in connect_loop()");
-		exit(1);
-	}
 	struct sockaddr_storage their_addr;
 	socklen_t sin_size = sizeof(their_addr);
     int new_fd = accept(welcome_sock, (struct sockaddr *)&their_addr,&sin_size);
