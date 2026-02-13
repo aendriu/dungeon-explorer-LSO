@@ -2,7 +2,7 @@
 #define GUI
 
 #include <ncurses.h>
-#include "header/types.h"
+#include "types.h"
 
 #include <stddef.h>
 
