@@ -3,11 +3,8 @@
 #include <string.h>
 #include "../header/dungeon.h"
 
-// Global quest items collected
 int quest_items_collected = 0;
 pthread_mutex_t quest_items_mutex;
-
-// ===== ROOM FUNCTIONS =====
 
 Room* room_create(int id, int width, int height) {
     Room *r = (Room*)malloc(sizeof(Room));
@@ -17,13 +14,11 @@ Room* room_create(int id, int width, int height) {
     r->width = width;
     r->height = height;
 
-    // Set doors at opposite corners
     r->entrance_x = 0;
     r->entrance_y = 0;
     r->exit_x = width - 1;
     r->exit_y = height - 1;
 
-    // Allocate 2D array for items
     r->items = (Item**)malloc(height * sizeof(Item*));
     if (!r->items) {
         free(r);
@@ -42,7 +37,6 @@ Room* room_create(int id, int width, int height) {
         }
     }
 
-    // Initialize all items as empty
     for (int y = 0; y < height; y++) {
         for (int x = 0; x < width; x++) {
             r->items[y][x].x = x;
@@ -70,12 +64,12 @@ void room_generate_items(Room *r) {
     if (!r) return;
 
     // Per ogni cella:
-    // 1. Tenta quest item (1/30)
-    // 2. Se fallisce, tenta item normale (1/10)
+    // 1. Tenta quest item (1/60)
+    // 2. Se fallisce, tenta item normale (1/25)
     // 3. Altrimenti vuota
     for (int y = 0; y < r->height; y++) {
         for (int x = 0; x < r->width; x++) {
-            int quest_rand = rand() % 30;
+            int quest_rand = rand() % 60;
             
             if (quest_rand == 0) {
                 // Quest item!
@@ -84,7 +78,7 @@ void room_generate_items(Room *r) {
                 r->items[y][x].symbol = ITEM_SYMBOL;
             } else {
                 // Tenta item normale
-                int normal_rand = rand() % 10;
+                int normal_rand = rand() % 25;
                 if (normal_rand == 0) {
                     // Item normale
                     r->items[y][x].type = ITEM_NORMAL;
@@ -110,13 +104,11 @@ Item* room_get_item(Room *r, int x, int y) {
 
     Item *item = &r->items[y][x];
     if (item->type == ITEM_NONE || item->collected) {
-        return NULL;  // No item or already collected
+        return NULL;
     }
 
     return item;
 }
-
-// ===== DUNGEON FUNCTIONS =====
 
 Dungeon* dungeon_create(int num_rooms, int room_width, int room_height) {
     Dungeon *d = (Dungeon*)malloc(sizeof(Dungeon));
@@ -129,7 +121,6 @@ Dungeon* dungeon_create(int num_rooms, int room_width, int room_height) {
         return NULL;
     }
 
-    // Create all rooms
     for (int i = 0; i < num_rooms; i++) {
         d->rooms[i] = room_create(i, room_width, room_height);
         if (!d->rooms[i]) {
@@ -166,24 +157,22 @@ Room* dungeon_get_room(Dungeon *d, int room_id) {
 
 char room_get_display_char(Room *r, int x, int y) {
     if (!r || x < 0 || x >= r->width || y < 0 || y >= r->height) {
-        return '?';  // Error char
+        return '?';
     }
 
-    // Check if it's a door first
     if (x == r->entrance_x && y == r->entrance_y) {
-        return DOOR_ENTRANCE;  // E
+        return DOOR_ENTRANCE;
     }
     if (x == r->exit_x && y == r->exit_y) {
-        return DOOR_EXIT;  // U
+        return DOOR_EXIT;
     }
 
-    // Then check for items
     Item *item = &r->items[y][x];
     if (item->type == ITEM_NONE || item->collected) {
-        return '.';  // Empty cell
+        return '.';
     }
 
-    return ITEM_SYMBOL;  // ?
+    return ITEM_SYMBOL;
 }
 
 void room_print_map(Room *r) {
@@ -217,7 +206,7 @@ bool item_collect(Dungeon *d, int player_id, int room_id, int x, int y) {
 
     if (item->type == ITEM_NORMAL) {
         printf("[PLAYER %d] Collected normal item at room %d (%d, %d)\n", player_id, room_id, x, y);
-        return false;  // Game continues
+        return false;
     } else if (item->type == ITEM_QUEST) {
         pthread_mutex_lock(&quest_items_mutex);
         quest_items_collected++;
@@ -228,7 +217,7 @@ bool item_collect(Dungeon *d, int player_id, int room_id, int x, int y) {
 
         if (total >= 3) {
             printf("[GAME] TEAM WON! All quest items collected!\n");
-            return true;  // Team wins!
+            return true;
         }
     }
 

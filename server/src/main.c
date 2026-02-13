@@ -5,20 +5,16 @@
 
 #include "../header/connection.h"
 #include "../header/player.h"
+#include "../header/game_state.h"
 
 Conn connections[MAX_PLAYERS] = {0}; 
 
-
-// L'override di questo segnale fa si che quando si preme
-// Cntrl-C, prima di uscire, si chiudano le connessioni.
 void sig_handlr_shutdown(int sig) {
     printf("Revieved signal %d, shutting down...\n", sig);  
     freeaddrinfo(servinfo);
     sockets_free(connections, 4);
     exit(0);
 }
-
-// ******************************************************* //
 
 int main (){
     memset(connections, 0, sizeof(connections));
@@ -35,12 +31,9 @@ int main (){
         }
     }
 
-
     freeaddrinfo(servinfo);
     sockets_free(connections, 4);
     return 0;
 }
-
-
 
     

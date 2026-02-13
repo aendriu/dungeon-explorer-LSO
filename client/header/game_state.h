@@ -13,6 +13,11 @@ typedef struct {
   int *players;
   int *pos_y;
   int *pos_x;
+  int room_h;
+  int room_w;
+  int **room_items;
+  int quest_items_collected;
+  int team_lives;
 } GameState;
 
 void free_game_state(GameState *state);

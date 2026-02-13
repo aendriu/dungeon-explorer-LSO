@@ -17,7 +17,7 @@ $(SERVER_OUT):
 	$(CC) $(CFLAGS) $(SERVER_INC) -o $(SERVER_OUT) $(SERVER_SRC) $(CJSON_SRC) -lm
 
 $(CLIENT_OUT):
-	$(CC) -Wall -Wextra -O2 -g $(CLIENT_INC) -o $(CLIENT_OUT) $(CLIENT_SRC) $(CJSON_SRC) -lncurses -lm
+	$(CC) $(CFLAGS) $(CLIENT_INC) -o $(CLIENT_OUT) $(CLIENT_SRC) $(CJSON_SRC) -lncurses -lm
 
 clean:
 	rm -f $(SERVER_OUT) $(CLIENT_OUT)

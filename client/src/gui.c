@@ -74,6 +74,8 @@ static int update_state_from_reply(GameState *state, char *reply, char *status,
   return 0;
 }
 
+static void render_minimap(WINDOW *win, const GameState *state, int top, int left);
+
 static void render_room(WINDOW *win, const GameState *state, int py, int px,
                         const char *msg) {
   int win_h, win_w;
@@ -101,6 +103,10 @@ static void render_room(WINDOW *win, const GameState *state, int py, int px,
       char ch = ' ';
       if (y == 0 || y == ROOM_H - 1 || x == 0 || x == ROOM_W - 1) {
         ch = '#';
+      } else if (state->room_items != NULL &&
+                 y < state->room_h && x < state->room_w &&
+                 state->room_items[y][x] != 0) {
+        ch = '?'; /* item */
       }
       mvwaddch(win, wy, wx, ch);
     }
@@ -189,6 +195,72 @@ static void render_room(WINDOW *win, const GameState *state, int py, int px,
   mvwprintw(win, list_y, 2, "Porte: N=%d E=%d S=%d W=%d",
             door_target_for_dir(state, 0), door_target_for_dir(state, 1),
             door_target_for_dir(state, 2), door_target_for_dir(state, 3));
+
+  render_minimap(win, state, top, left);
+}
+
+static void render_minimap(WINDOW *win, const GameState *state, int top, int left) {
+  int mx = left + ROOM_W + 3;
+  int my = top;
+
+  wattron(win, A_BOLD);
+  mvwprintw(win, my, mx, "MAPPA");
+  wattroff(win, A_BOLD);
+  my += 1;
+
+  /* Draw rooms 0-9 in a 2x5 grid with connections */
+  for (int row = 0; row < 2; row++) {
+    int cx = mx;
+    for (int col = 0; col < 5; col++) {
+      int room = row * 5 + col;
+      if (room >= state->map_size) break;
+
+      bool is_current = (room == state->current_room);
+      bool is_connected = false;
+      if (state->adj && state->current_room >= 0 &&
+          state->current_room < state->map_size) {
+        is_connected = state->adj[state->current_room][room] != 0;
+      }
+
+      if (is_current) wattron(win, A_REVERSE);
+      else if (is_connected) wattron(win, A_BOLD);
+      mvwprintw(win, my, cx, "%d", room);
+      wattroff(win, A_REVERSE);
+      wattroff(win, A_BOLD);
+      cx++;
+
+      if (col < 4) {
+        int next = row * 5 + col + 1;
+        if (next < state->map_size && state->adj &&
+            state->adj[room][next])
+          mvwaddch(win, my, cx, ACS_HLINE);
+        else
+          mvwaddch(win, my, cx, ' ');
+        cx++;
+      }
+    }
+    my++;
+
+    if (row == 0) {
+      cx = mx;
+      for (int col = 0; col < 5; col++) {
+        int room_top = col;
+        int room_bot = 5 + col;
+        if (room_bot < state->map_size && state->adj &&
+            state->adj[room_top][room_bot])
+          mvwaddch(win, my, cx, ACS_VLINE);
+        else
+          mvwaddch(win, my, cx, ' ');
+        cx += 2; /* skip the horizontal-connection column */
+      }
+      my++;
+    }
+  }
+
+  my += 1;
+  mvwprintw(win, my, mx, "Quest: %d/%d", state->quest_items_collected, QUEST_ITEMS_TO_WIN);
+  my++;
+  mvwprintw(win, my, mx, "Vite:  %d", state->team_lives);
 }
 
 static void render_game(WINDOW *win, const GameState *state, int py, int px,
@@ -197,6 +269,24 @@ static void render_game(WINDOW *win, const GameState *state, int py, int px,
   box(win, 0, 0);
   render_room(win, state, py, px, msg);
   wrefresh(win);
+}
+
+static int check_game_over(WINDOW *win, const GameState *state) {
+  if (state->quest_items_collected >= QUEST_ITEMS_TO_WIN) {
+    show_popup(win, "HAI VINTO!",
+               "Il team ha raccolto tutti gli oggetti quest!",
+               "Premi un tasto...");
+    wgetch(win);
+    return 1;
+  }
+  if (state->team_lives <= 0) {
+    show_popup(win, "SCONFITTA!",
+               "Il team ha perso tutte le vite!",
+               "Premi un tasto...");
+    wgetch(win);
+    return 1;
+  }
+  return 0;
 }
 
 int game_screen(GameState *state) {
@@ -215,6 +305,7 @@ int game_screen(GameState *state) {
   int py = ROOM_H / 2;
   int px = ROOM_W / 2;
 
+  int prev_lives = state->team_lives;
   char status[128] = {0};
   render_game(win, state, py, px, NULL);
 
@@ -268,6 +359,7 @@ int game_screen(GameState *state) {
       }
       snprintf(status, sizeof(status), "Sei entrato nella stanza %d", target);
       render_game(win, state, py, px, status);
+      if (check_game_over(win, state)) break;
       continue;
     }
 
@@ -286,7 +378,14 @@ int game_screen(GameState *state) {
       render_game(win, state, py, px, status);
       continue;
     }
-    render_game(win, state, py, px, NULL);
+    if (state->team_lives < prev_lives) {
+      snprintf(status, sizeof(status), "Il team ha perso una vita! Vite: %d", state->team_lives);
+      render_game(win, state, py, px, status);
+    } else {
+      render_game(win, state, py, px, NULL);
+    }
+    prev_lives = state->team_lives;
+    if (check_game_over(win, state)) break;
   }
 
   delwin(win);

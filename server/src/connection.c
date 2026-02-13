@@ -4,16 +4,11 @@
 #include <ifaddrs.h>
 #include <netinet/in.h>
 
-// ************************************************** //
-
 static const char *MSG_MAX_PLAYER_REACHED =
     "The maximum player capacity has been reached!";
-/*
-*/
 int welcome_sock = 0;
 bool si_initialized = false;
 struct addrinfo *servinfo = NULL;
-Team team;
 Dungeon *game_dungeon = NULL;
 
 void init_servinfo() {
@@ -38,8 +33,6 @@ void init_servinfo() {
     printf("- servinfo initialized\n");
 }
 
-// *****
-
 void init_welcome_sock() {
     welcome_sock = socket_create();
     socket_bind(welcome_sock);
@@ -50,36 +43,6 @@ void init_welcome_sock() {
     printf("- welcome socket initialized\n");
 }
 
-// *****
-
-void init_teams() {
-    team.shared_lives = 5;
-    pthread_mutex_init(&team.lives_mutex, NULL);
-    printf("- team initialized with 5 shared lives\n");
-}
-
-// *****
-
-void init_dungeon(int width, int height) {
-    if (game_dungeon != NULL) {
-        dungeon_destroy(game_dungeon);
-    }
-    // Create dungeon with 1 room as default (can be expanded)
-    game_dungeon = dungeon_create(1, width, height);
-    if (game_dungeon) {
-        // Generate items for all rooms
-        for (int i = 0; i < game_dungeon->num_rooms; i++) {
-            room_generate_items(game_dungeon->rooms[i]);
-        }
-        pthread_mutex_init(&quest_items_mutex, NULL);
-    }
-}
-
-
-
-
-// *****
-
 void sockets_free(Conn* socks, int size) {
     close(welcome_sock);
     for(int i = 0; i < size; i++) {
@@ -88,8 +51,6 @@ void sockets_free(Conn* socks, int size) {
     }
     return;
 }
-
-// ************************************************** //
 
 int socket_create() {
     if(!si_initialized) { init_servinfo();}
@@ -102,8 +63,6 @@ int socket_create() {
     return sockfd;
 }
 
-// *****
-
 void socket_bind(int sockfd) {
     int res = bind(sockfd, servinfo->ai_addr, servinfo->ai_addrlen);
     if(res == -1) {
@@ -111,8 +70,6 @@ void socket_bind(int sockfd) {
         perror("[SERVER] - bind()");
     }
 }
-
-// *****
 
 int listen_loop() {
 	struct sockaddr_storage their_addr;
@@ -133,6 +90,4 @@ void listen_loop_refuse() {
         close(new_fd);
     }
 }
-
-
 

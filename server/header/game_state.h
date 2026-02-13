@@ -1,0 +1,37 @@
+#ifndef GAME_STATE_H
+#define GAME_STATE_H
+
+#include <stdbool.h>
+#include <pthread.h>
+
+#define FRAME_SIZE 4096
+#define MAP_SIZE   10
+#define ROOM_H      9
+#define ROOM_W     21
+
+typedef struct {
+    int  map_size;
+    int  map[MAP_SIZE][MAP_SIZE];
+    int  positions[4];
+    int  pos_y[4];
+    int  pos_x[4];
+    bool started;
+    pthread_mutex_t mutex;
+} GameState;
+
+extern GameState game_state;
+
+typedef struct {
+    int shared_lives;
+    pthread_mutex_t lives_mutex;
+} Team;
+
+extern Team team;
+
+void  init_teams(void);
+
+void  init_game_state_if_needed(void);
+
+char *build_game_state_json(int player_id, const char *error);
+
+#endif

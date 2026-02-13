@@ -22,7 +22,7 @@ typedef struct {
     int x, y;
     ItemType type;
     bool collected;
-    char symbol;  // Display symbol (? per gli items)
+    char symbol;
 } Item;
 
 // Room è una stanza del dungeon
@@ -41,24 +41,19 @@ typedef struct {
     Room **rooms;  // array di stanze
 } Dungeon;
 
-// Global quest items collected (shared among all players)
 extern int quest_items_collected;
 extern pthread_mutex_t quest_items_mutex;
 
-// Room functions
 Item* room_get_item(Room *r, int x, int y);
 void room_generate_items(Room *r);
 char room_get_display_char(Room *r, int x, int y);
 
-// Dungeon functions
 Dungeon* dungeon_create(int num_rooms, int room_width, int room_height);
 void dungeon_destroy(Dungeon *d);
 Room* dungeon_get_room(Dungeon *d, int room_id);
 bool item_collect(Dungeon *d, int player_id, int room_id, int x, int y);
 
-// Map display
 void room_print_map(Room *r);
 
 #endif
-
 

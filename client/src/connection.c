@@ -4,8 +4,6 @@
 int sock = -1;
 struct addrinfo *servinfo = NULL;
 
-// *****
-
 static void init_servinfo(const char *host, const char *port) {
     if (servinfo != NULL) {
         freeaddrinfo(servinfo);
@@ -31,8 +29,6 @@ static void init_servinfo(const char *host, const char *port) {
     printf("- servinfo initialized\n");
 }
 
-// *****
-
 void socket_create() {
     sock = socket(servinfo->ai_family, servinfo->ai_socktype, servinfo->ai_protocol); 
     if( sock == -1 ) {
@@ -40,8 +36,6 @@ void socket_create() {
         exit(1);
     }
 }
-
-// *****
 
 int connect_to_server(const char *host, const char *port) {
     if (host == NULL || port == NULL) {
@@ -59,6 +53,4 @@ int connect_to_server(const char *host, const char *port) {
 
     return 0;
 }
-
-
 

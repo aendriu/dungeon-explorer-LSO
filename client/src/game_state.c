@@ -15,10 +15,19 @@ void free_game_state(GameState *state) {
   free(state->players);
   free(state->pos_y);
   free(state->pos_x);
+  if (state->room_items != NULL) {
+    for (int i = 0; i < state->room_h; i++) {
+      free(state->room_items[i]);
+    }
+    free(state->room_items);
+  }
   state->adj = NULL;
   state->players = NULL;
   state->pos_y = NULL;
   state->pos_x = NULL;
+  state->room_items = NULL;
+  state->room_h = 0;
+  state->room_w = 0;
   state->map_size = 0;
   state->current_room = 0;
   state->player_id = -1;
@@ -140,6 +149,46 @@ int parse_game_state(const char *json, GameState *state, char *err_buf,
     }
   }
 
+  /* Parse room dimensions and item grid */
+  cJSON *jroom_h = cJSON_GetObjectItemCaseSensitive(root, "room_h");
+  cJSON *jroom_w = cJSON_GetObjectItemCaseSensitive(root, "room_w");
+  if (cJSON_IsNumber(jroom_h) && cJSON_IsNumber(jroom_w)) {
+    state->room_h = jroom_h->valueint;
+    state->room_w = jroom_w->valueint;
+  }
+
+  cJSON *jitems = cJSON_GetObjectItemCaseSensitive(root, "room_items");
+  if (cJSON_IsArray(jitems) && state->room_h > 0 && state->room_w > 0) {
+    state->room_items = (int **)calloc(state->room_h, sizeof(int *));
+    if (state->room_items != NULL) {
+      for (int y = 0; y < state->room_h; y++) {
+        state->room_items[y] = (int *)calloc(state->room_w, sizeof(int));
+      }
+      int nrows = cJSON_GetArraySize(jitems);
+      for (int y = 0; y < nrows && y < state->room_h; y++) {
+        cJSON *row = cJSON_GetArrayItem(jitems, y);
+        if (!cJSON_IsArray(row))
+          continue;
+        int ncols = cJSON_GetArraySize(row);
+        for (int x = 0; x < ncols && x < state->room_w; x++) {
+          cJSON *cell = cJSON_GetArrayItem(row, x);
+          if (cJSON_IsNumber(cell)) {
+            state->room_items[y][x] = cell->valueint;
+          }
+        }
+      }
+    }
+  }
+
+  /* Parse quest progress and team lives */
+  cJSON *jquest = cJSON_GetObjectItemCaseSensitive(root, "quest_items_collected");
+  if (cJSON_IsNumber(jquest))
+    state->quest_items_collected = jquest->valueint;
+
+  cJSON *jlives = cJSON_GetObjectItemCaseSensitive(root, "team_lives");
+  if (cJSON_IsNumber(jlives))
+    state->team_lives = jlives->valueint;
+
   cJSON_Delete(root);
   return 0;
 }
@@ -147,6 +196,8 @@ int parse_game_state(const char *json, GameState *state, char *err_buf,
 void get_adjacent_rooms(const GameState *state, int *neighbors, int *count) {
   *count = 0;
   if (!state || !state->adj)
+    return;
+  if (state->current_room < 0 || state->current_room >= state->map_size)
     return;
   for (int i = 0; i < state->map_size; i++) {
     if (state->adj[state->current_room][i]) {
