@@ -7,6 +7,8 @@
 int welcome_sock = 0;
 bool si_initialized = false;
 struct addrinfo *servinfo = NULL;
+Team team;
+Dungeon *game_dungeon = NULL;
 
 void init_servinfo() {
     struct addrinfo hints;
@@ -37,6 +39,34 @@ void init_welcome_sock() {
     socket_bind(welcome_sock);
     printf("- welcome socket initialized\n");
 }
+
+// *****
+
+void init_teams() {
+    team.shared_lives = 5;
+    pthread_mutex_init(&team.lives_mutex, NULL);
+    printf("- team initialized with 5 shared lives\n");
+}
+
+// *****
+
+void init_dungeon(int width, int height) {
+    if (game_dungeon != NULL) {
+        dungeon_destroy(game_dungeon);
+    }
+    // Create dungeon with 1 room as default (can be expanded)
+    game_dungeon = dungeon_create(1, width, height);
+    if (game_dungeon) {
+        // Generate items for all rooms
+        for (int i = 0; i < game_dungeon->num_rooms; i++) {
+            room_generate_items(game_dungeon->rooms[i]);
+        }
+        pthread_mutex_init(&quest_items_mutex, NULL);
+    }
+}
+
+
+
 
 // *****
 

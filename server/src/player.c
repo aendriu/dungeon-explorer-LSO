@@ -52,6 +52,14 @@ void init_newplayer(int sockfd, Conn* connections) {
     pthread_t tid;
     connections[plid_seq].player_id = plid_seq;
     connections[plid_seq].sockfd = sockfd;
+    connections[plid_seq].room_id = 0;  // Start in room 0
+    connections[plid_seq].x = 0;
+    connections[plid_seq].y = 0;
+    
+    // Assign player symbol based on ID
+    char symbols[] = {PLAYER_1_SYMBOL, PLAYER_2_SYMBOL, PLAYER_3_SYMBOL, PLAYER_4_SYMBOL};
+    connections[plid_seq].symbol = symbols[plid_seq % 4];
+    
 	int rc = pthread_create(&tid, NULL, handle_player, (void*)(&connections[plid_seq]));
 	if (rc != 0) {
         perror("pthread_create ERROR in init_newplayer: ");
@@ -103,5 +111,75 @@ void *handle_player(void* args) {
     myconn->sockfd = 0;
     return NULL;
 
+}
+
+// *****
+
+int player_lose_life() {
+    pthread_mutex_lock(&team.lives_mutex);
+    team.shared_lives--;
+    int remaining_lives = team.shared_lives;
+    printf("[TEAM] Player lost a life! Remaining: %d\n", remaining_lives);
+    
+    if (remaining_lives <= 0) {
+        printf("[TEAM] TEAM DEFEATED!\n");
+        // Inviare il messaggio di sconfitta a tutti i giocatori
+        for (int i = 0; i < plid_seq; i++) {
+            if (connections[i].sockfd != 0) {
+                send_all(connections[i].sockfd, MSG_TEAM_DEFEATED, strlen(MSG_TEAM_DEFEATED) + 1);
+            }
+        }
+    }
+    
+    pthread_mutex_unlock(&team.lives_mutex);
+    return remaining_lives;
+}
+
+// *****
+
+bool player_collect_item(int player_id, int x, int y) {
+    if (!game_dungeon) {
+        return false;
+    }
+
+    // For now, use room 0 as default (can be expanded with player tracking)
+    int room_id = 0;
+    bool team_won = item_collect(game_dungeon, player_id, room_id, x, y);
+
+    if (team_won) {
+        printf("[GAME] TEAM WON! All quest items collected!\n");
+        // Inviare il messaggio di vittoria a tutti i giocatori
+        for (int i = 0; i < plid_seq; i++) {
+            if (connections[i].sockfd != 0) {
+                send_all(connections[i].sockfd, MSG_TEAM_WON, strlen(MSG_TEAM_WON) + 1);
+            }
+        }
+        return true;
+    }
+
+    // Broadcast item collected message with player name
+    char item_msg[256];
+    snprintf(item_msg, sizeof(item_msg), "[PLAYER %d] Hai preso un oggetto!", player_id);
+    for (int i = 0; i < plid_seq; i++) {
+        if (connections[i].sockfd != 0) {
+            send_all(connections[i].sockfd, item_msg, strlen(item_msg) + 1);
+        }
+    }
+
+    // Inviare aggiornamento del quest status ai giocatori
+    char quest_msg[256];
+    snprintf(quest_msg, sizeof(quest_msg), "%s:%d", MSG_QUEST_UPDATE, quest_items_collected);
+    for (int i = 0; i < plid_seq; i++) {
+        if (connections[i].sockfd != 0) {
+            send_all(connections[i].sockfd, quest_msg, strlen(quest_msg) + 1);
+        }
+    }
+
+    // Incrementare counter items per il giocatore
+    if (player_id >= 0 && player_id < plid_seq) {
+        connections[player_id].items_collected++;
+    }
+
+    return false;
 }
 

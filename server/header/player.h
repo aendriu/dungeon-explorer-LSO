@@ -13,11 +13,18 @@
 
 // player id sequence
 extern int plid_seq;
+extern Conn connections[4];
 
 // initialize newplayer sock
 void init_newplayer(int,Conn*);
 
 void *handle_player(void* args);
+
+// team lives management
+int player_lose_life();
+
+// item management
+bool player_collect_item(int player_id, int x, int y);
 
 #endif
 
