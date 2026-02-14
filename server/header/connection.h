@@ -14,6 +14,7 @@
 
 #define PORT "9090"
 #define BACKLOG 10
+#define MAX_ITEMS_PER_PLAYER 25
 
 extern int welcome_sock;
 extern bool si_initialized;
@@ -28,6 +29,9 @@ typedef struct {
     int room_id;
     int x, y;
     char symbol;
+    Item items[MAX_ITEMS_PER_PLAYER];  // Array di item collezionati
+    int normal_items_count;             // Contatore item normali
+    int quest_items_count;              // Contatore item quest
 } Conn;
 
 void init_servinfo();

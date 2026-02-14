@@ -42,6 +42,31 @@ int send_all(int sockfd, const char *msg, size_t len) {
 
   return 0; // tutto inviato correttamente
 }
+
+void print_player_items(int player_id) {
+    if (player_id < 0 || player_id >= MAX_PLAYERS) {
+        printf("[ERROR] Invalid player_id: %d\n", player_id);
+        return;
+    }
+
+    Conn *player = &connections[player_id];
+    printf("\n========================================\n");
+    printf("INVENTORY PLAYER %d:\n", player_id);
+    printf("- Item Normali: %d\n", player->normal_items_count);
+    printf("- Item Quest: %d\n", player->quest_items_count);
+    printf("- Total Items: %d/%d\n", player->items_collected, MAX_ITEMS_PER_PLAYER);
+    printf("\nDettagli:\n");
+
+    if (player->items_collected == 0) {
+        printf("  (Nessun item collezionato)\n");
+    } else {
+        for (int i = 0; i < player->items_collected; i++) {
+            const char *type_str = (player->items[i].type == ITEM_QUEST) ? "QUEST" : "NORMAL";
+            printf("  [%d] %s\n", i + 1, type_str);
+        }
+    }
+    printf("========================================\n\n");
+}
 int get_connected_players(void) {
   int count = 0;
   pthread_mutex_lock(&plid_mutex);
@@ -63,6 +88,10 @@ void init_newplayer(int sockfd, Conn *connections) {
 
   connections[idx].player_id = idx;
   connections[idx].sockfd = sockfd;
+  connections[idx].items_collected = 0;
+  connections[idx].normal_items_count = 0;
+  connections[idx].quest_items_count = 0;
+  memset(connections[idx].items, 0, sizeof(connections[idx].items));
 
   pthread_mutex_lock(&game_state.mutex);
   if (game_state.started) {
@@ -127,7 +156,31 @@ bool player_collect_item(int player_id, int x, int y) {
                       : -1;
     if (room_id < 0)
         return false;
+
+    // Recupera l'item prima di collezionarlo (per salvarlo nell'inventory)
+    Room *r = dungeon_get_room(game_dungeon, room_id);
+    Item *item = room_get_item(r, x, y);
+    ItemType collected_type = ITEM_NONE;
+    if (item) {
+        collected_type = item->type;
+    }
+
     bool team_won = item_collect(game_dungeon, player_id, room_id, x, y);
+
+    // Aggiungi l'item all'inventory del player se è un item valido
+    if (collected_type != ITEM_NONE && player_id >= 0 && player_id < MAX_PLAYERS) {
+        Conn *player = &connections[player_id];
+        if (player->items_collected < MAX_ITEMS_PER_PLAYER) {
+            player->items[player->items_collected] = *item;
+            player->items_collected++;
+
+            if (collected_type == ITEM_QUEST) {
+                player->quest_items_count++;
+            } else if (collected_type == ITEM_NORMAL) {
+                player->normal_items_count++;
+            }
+        }
+    }
 
     if (team_won) {
         printf("[GAME] TEAM WON! All quest items collected!\n");
@@ -156,11 +209,6 @@ bool player_collect_item(int player_id, int x, int y) {
         if (connections[i].sockfd != 0) {
             send_all(connections[i].sockfd, quest_msg, strlen(quest_msg) + 1);
         }
-    }
-
-    // Incrementare counter items per il giocatore
-    if (player_id >= 0 && player_id < plid_seq) {
-        connections[player_id].items_collected++;
     }
 
     return false;
