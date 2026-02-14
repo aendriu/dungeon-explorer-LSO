@@ -289,6 +289,60 @@ static int check_game_over(WINDOW *win, const GameState *state) {
   return 0;
 }
 
+static void show_inventories(const char *json_str) {
+  WINDOW *win = newwin(0, 0, 0, 0);
+  wattron(win, A_BOLD);
+  mvwprintw(win, 1, 2, ">>> INVENTARI DEI GIOCATORI <<<");
+  wattroff(win, A_BOLD);
+
+  cJSON *root = cJSON_Parse(json_str);
+  if (!root) {
+    mvwprintw(win, 3, 2, "Errore nel parsing degli inventari");
+    wrefresh(win);
+    sleep(2);
+    delwin(win);
+    return;
+  }
+
+  cJSON *inventories = cJSON_GetObjectItemCaseSensitive(root, "inventories");
+  if (!cJSON_IsArray(inventories)) {
+    mvwprintw(win, 3, 2, "Nessun inventario disponibile");
+    wrefresh(win);
+    sleep(2);
+    cJSON_Delete(root);
+    delwin(win);
+    return;
+  }
+
+  int row = 3;
+  cJSON *player_obj = NULL;
+  cJSON_ArrayForEach(player_obj, inventories) {
+    cJSON *player_id = cJSON_GetObjectItemCaseSensitive(player_obj, "player_id");
+    cJSON *normal = cJSON_GetObjectItemCaseSensitive(player_obj, "normal_items");
+    cJSON *quest = cJSON_GetObjectItemCaseSensitive(player_obj, "quest_items");
+    cJSON *total = cJSON_GetObjectItemCaseSensitive(player_obj, "total_items");
+
+    if (!cJSON_IsNumber(player_id) || !cJSON_IsNumber(normal) || 
+        !cJSON_IsNumber(quest) || !cJSON_IsNumber(total)) {
+      continue;
+    }
+
+    wattron(win, A_BOLD);
+    mvwprintw(win, row++, 2, "Giocatore %d:", player_id->valueint);
+    wattroff(win, A_BOLD);
+    mvwprintw(win, row++, 4, "Item Normali: %d", normal->valueint);
+    mvwprintw(win, row++, 4, "Item Quest: %d", quest->valueint);
+    mvwprintw(win, row++, 4, "Totale: %d", total->valueint);
+    row++;
+  }
+
+  mvwprintw(win, row + 1, 2, "Premi un tasto per continuare...");
+  wrefresh(win);
+  wgetch(win);
+  cJSON_Delete(root);
+  delwin(win);
+}
+
 int game_screen(GameState *state) {
   int win_h = start_y - 2;
   int win_w = start_x - 2;
@@ -598,6 +652,13 @@ int lobby_screen(void) {
         wgetch(win);
         delwin(win);
         return -1;
+      }
+
+      /* Check if it's inventories JSON */
+      if (reply[0] == '{') {
+        show_inventories(reply);
+        free(reply);
+        continue;
       }
 
       /* Check if team was defeated */

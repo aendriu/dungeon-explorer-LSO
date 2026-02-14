@@ -67,6 +67,48 @@ void print_player_items(int player_id) {
     }
     printf("========================================\n\n");
 }
+
+void broadcast_all_inventories(void) {
+    if (plid_seq <= 0) {
+        return;
+    }
+
+    cJSON *root = cJSON_CreateObject();
+    cJSON *players_arr = cJSON_CreateArray();
+
+    for (int i = 0; i < plid_seq; i++) {
+        if (connections[i].sockfd == 0) continue;
+
+        cJSON *player_obj = cJSON_CreateObject();
+        cJSON_AddNumberToObject(player_obj, "player_id", i);
+        cJSON_AddNumberToObject(player_obj, "normal_items", connections[i].normal_items_count);
+        cJSON_AddNumberToObject(player_obj, "quest_items", connections[i].quest_items_count);
+        cJSON_AddNumberToObject(player_obj, "total_items", connections[i].items_collected);
+
+        cJSON *items_arr = cJSON_CreateArray();
+        for (int j = 0; j < connections[i].items_collected; j++) {
+            cJSON *item_obj = cJSON_CreateObject();
+            const char *type_str = (connections[i].items[j].type == ITEM_QUEST) ? "QUEST" : "NORMAL";
+            cJSON_AddStringToObject(item_obj, "type", type_str);
+            cJSON_AddItemToArray(items_arr, item_obj);
+        }
+        cJSON_AddItemToObject(player_obj, "items", items_arr);
+        cJSON_AddItemToArray(players_arr, player_obj);
+    }
+
+    cJSON_AddItemToObject(root, "inventories", players_arr);
+    char *json_str = cJSON_Print(root);
+
+    // Invia a tutti i giocatori
+    for (int i = 0; i < plid_seq; i++) {
+        if (connections[i].sockfd != 0) {
+            send_all(connections[i].sockfd, json_str, strlen(json_str) + 1);
+        }
+    }
+
+    cJSON_free(json_str);
+    cJSON_Delete(root);
+}
 int get_connected_players(void) {
   int count = 0;
   pthread_mutex_lock(&plid_mutex);
@@ -125,6 +167,8 @@ int player_lose_life() {
 
     if (remaining_lives <= 0) {
         printf("[TEAM] TEAM DEFEATED!\n");
+        broadcast_all_inventories();
+        sleep(1);
         for (int i = 0; i < MAX_PLAYERS; i++) {
             if (connections[i].sockfd != 0) {
                 send_all(connections[i].sockfd, MSG_TEAM_DEFEATED,
@@ -184,6 +228,8 @@ bool player_collect_item(int player_id, int x, int y) {
 
     if (team_won) {
         printf("[GAME] TEAM WON! All quest items collected!\n");
+        broadcast_all_inventories();
+        sleep(1);
         // Inviare il messaggio di vittoria a tutti i giocatori
         for (int i = 0; i < plid_seq; i++) {
             if (connections[i].sockfd != 0) {

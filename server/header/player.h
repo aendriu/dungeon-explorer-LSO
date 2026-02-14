@@ -31,5 +31,6 @@ int player_lose_life();
 int send_all(int sockfd, const char *msg, size_t len);
 bool player_collect_item(int player_id, int x, int y);
 void print_player_items(int player_id);
+void broadcast_all_inventories(void);
 
 #endif
