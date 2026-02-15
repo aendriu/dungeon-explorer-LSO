@@ -32,6 +32,7 @@ typedef struct {
     Item items[MAX_ITEMS_PER_PLAYER];  // Array di item collezionati
     int normal_items_count;             // Contatore item normali
     int quest_items_count;              // Contatore item quest
+    int traps_triggered;                // Contatore trappole attivate
 } Conn;
 
 void init_servinfo();

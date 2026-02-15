@@ -55,6 +55,7 @@ void print_player_items(int player_id) {
     printf("- Item Normali: %d\n", player->normal_items_count);
     printf("- Item Quest: %d\n", player->quest_items_count);
     printf("- Total Items: %d/%d\n", player->items_collected, MAX_ITEMS_PER_PLAYER);
+    printf("- Trappole Attivate: %d\n", player->traps_triggered);
     printf("\nDettagli:\n");
 
     if (player->items_collected == 0) {
@@ -84,6 +85,7 @@ void broadcast_all_inventories(void) {
         cJSON_AddNumberToObject(player_obj, "normal_items", connections[i].normal_items_count);
         cJSON_AddNumberToObject(player_obj, "quest_items", connections[i].quest_items_count);
         cJSON_AddNumberToObject(player_obj, "total_items", connections[i].items_collected);
+        cJSON_AddNumberToObject(player_obj, "traps_triggered", connections[i].traps_triggered);
 
         cJSON *items_arr = cJSON_CreateArray();
         for (int j = 0; j < connections[i].items_collected; j++) {
@@ -133,6 +135,7 @@ void init_newplayer(int sockfd, Conn *connections) {
   connections[idx].items_collected = 0;
   connections[idx].normal_items_count = 0;
   connections[idx].quest_items_count = 0;
+  connections[idx].traps_triggered = 0;
   memset(connections[idx].items, 0, sizeof(connections[idx].items));
 
   pthread_mutex_lock(&game_state.mutex);
@@ -211,8 +214,30 @@ bool player_collect_item(int player_id, int x, int y) {
 
     bool team_won = item_collect(game_dungeon, player_id, room_id, x, y);
 
-    // Aggiungi l'item all'inventory del player se è un item valido
-    if (collected_type != ITEM_NONE && player_id >= 0 && player_id < MAX_PLAYERS) {
+    // Gestione trappola: fa perdere una vita
+    if (collected_type == ITEM_TRAP) {
+        // Incrementa il contatore delle trappole del player
+        if (player_id >= 0 && player_id < MAX_PLAYERS) {
+            connections[player_id].traps_triggered++;
+        }
+        
+        char trap_msg[256];
+        snprintf(trap_msg, sizeof(trap_msg), "[PLAYER %d] Ha attivato una TRAPPOLA!", player_id);
+        for (int i = 0; i < plid_seq; i++) {
+            if (connections[i].sockfd != 0) {
+                send_all(connections[i].sockfd, trap_msg, strlen(trap_msg) + 1);
+            }
+        }
+        
+        int remaining = player_lose_life();
+        if (remaining <= 0) {
+            return true; // Team defeated
+        }
+        return false;
+    }
+
+    // Aggiungi l'item all'inventory del player se è un item valido (non trappola)
+    if (collected_type != ITEM_NONE && collected_type != ITEM_TRAP && player_id >= 0 && player_id < MAX_PLAYERS) {
         Conn *player = &connections[player_id];
         if (player->items_collected < MAX_ITEMS_PER_PLAYER) {
             player->items[player->items_collected] = *item;

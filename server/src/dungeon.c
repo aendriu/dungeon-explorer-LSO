@@ -65,11 +65,12 @@ void room_generate_items(Room *r) {
 
     // Per ogni cella:
     // 1. Tenta quest item (1/60)
-    // 2. Se fallisce, tenta item normale (1/25)
-    // 3. Altrimenti vuota
+    // 2. Se fallisce, tenta trappola (1/50)
+    // 3. Se fallisce, tenta item normale (1/25)
+    // 4. Altrimenti vuota
     for (int y = 0; y < r->height; y++) {
         for (int x = 0; x < r->width; x++) {
-            int quest_rand = rand() % 60;
+            int quest_rand = rand() % 100;
             
             if (quest_rand == 0) {
                 // Quest item!
@@ -77,18 +78,27 @@ void room_generate_items(Room *r) {
                 r->items[y][x].collected = false;
                 r->items[y][x].symbol = ITEM_SYMBOL;
             } else {
-                // Tenta item normale
-                int normal_rand = rand() % 25;
-                if (normal_rand == 0) {
-                    // Item normale
-                    r->items[y][x].type = ITEM_NORMAL;
+                // Tenta trappola
+                int trap_rand = rand() % 50;
+                if (trap_rand == 0) {
+                    // Trappola!
+                    r->items[y][x].type = ITEM_TRAP;
                     r->items[y][x].collected = false;
-                    r->items[y][x].symbol = ITEM_SYMBOL;
+                    r->items[y][x].symbol = TRAP_SYMBOL;
                 } else {
-                    // Cella vuota
-                    r->items[y][x].type = ITEM_NONE;
-                    r->items[y][x].collected = true;
-                    r->items[y][x].symbol = ' ';
+                    // Tenta item normale
+                    int normal_rand = rand() % 25;
+                    if (normal_rand == 0) {
+                        // Item normale
+                        r->items[y][x].type = ITEM_NORMAL;
+                        r->items[y][x].collected = false;
+                        r->items[y][x].symbol = ITEM_SYMBOL;
+                    } else {
+                        // Cella vuota
+                        r->items[y][x].type = ITEM_NONE;
+                        r->items[y][x].collected = true;
+                        r->items[y][x].symbol = ' ';
+                    }
                 }
             }
         }
@@ -219,6 +229,9 @@ bool item_collect(Dungeon *d, int player_id, int room_id, int x, int y) {
             printf("[GAME] TEAM WON! All quest items collected!\n");
             return true;
         }
+    } else if (item->type == ITEM_TRAP) {
+        printf("[PLAYER %d] Triggered a TRAP at room %d (%d, %d)!\n", player_id, room_id, x, y);
+        return false;
     }
 
     return false;

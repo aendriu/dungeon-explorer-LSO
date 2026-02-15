@@ -5,6 +5,7 @@
 #include <pthread.h>
 
 #define ITEM_SYMBOL '?'
+#define TRAP_SYMBOL '?'
 #define DOOR_ENTRANCE 'E'
 #define DOOR_EXIT 'U'
 #define PLAYER_1_SYMBOL '@'
@@ -15,7 +16,8 @@
 typedef enum {
     ITEM_NONE,
     ITEM_NORMAL,
-    ITEM_QUEST
+    ITEM_QUEST,
+    ITEM_TRAP
 } ItemType;
 
 typedef struct {
