@@ -2,12 +2,13 @@
 #include <stdio.h>
 #include <string.h>
 #include "../header/dungeon.h"
+#include "../header/game_state.h"
 
 int quest_items_collected = 0;
-pthread_mutex_t quest_items_mutex;
+pthread_mutex_t quest_items_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 Room* room_create(int id, int width, int height) {
-    Room *r = (Room*)malloc(sizeof(Room));
+    Room *r = malloc(sizeof(Room));
     if (!r) return NULL;
 
     r->id = id;
@@ -19,14 +20,14 @@ Room* room_create(int id, int width, int height) {
     r->exit_x = width - 1;
     r->exit_y = height - 1;
 
-    r->items = (Item**)malloc(height * sizeof(Item*));
+    r->items = malloc(height * sizeof(Item*));
     if (!r->items) {
         free(r);
         return NULL;
     }
 
     for (int i = 0; i < height; i++) {
-        r->items[i] = (Item*)malloc(width * sizeof(Item));
+        r->items[i] = malloc(width * sizeof(Item));
         if (!r->items[i]) {
             for (int j = 0; j < i; j++) {
                 free(r->items[j]);
@@ -47,8 +48,7 @@ Room* room_create(int id, int width, int height) {
         }
     }
 
-    // Alloca memoria per i mostri
-    r->monsters = (Monster**)malloc(height * sizeof(Monster*));
+    r->monsters = malloc(height * sizeof(Monster*));
     if (!r->monsters) {
         for (int i = 0; i < height; i++) {
             free(r->items[i]);
@@ -59,7 +59,7 @@ Room* room_create(int id, int width, int height) {
     }
 
     for (int i = 0; i < height; i++) {
-        r->monsters[i] = (Monster*)malloc(width * sizeof(Monster));
+        r->monsters[i] = malloc(width * sizeof(Monster));
         if (!r->monsters[i]) {
             for (int j = 0; j < i; j++) {
                 free(r->monsters[j]);
@@ -104,39 +104,29 @@ void room_destroy(Room *r) {
 
 void room_generate_items(Room *r) {
     if (!r) return;
+    unsigned int *seed = get_rand_seed();
 
-    // Per ogni cella:
-    // 1. Tenta quest item (1/60)
-    // 2. Se fallisce, tenta trappola (1/50)
-    // 3. Se fallisce, tenta item normale (1/25)
-    // 4. Altrimenti vuota
     for (int y = 0; y < r->height; y++) {
         for (int x = 0; x < r->width; x++) {
-            int quest_rand = rand() % 100;
+            int quest_rand = rand_r(seed) % 100;
             
             if (quest_rand == 0) {
-                // Quest item!
                 r->items[y][x].type = ITEM_QUEST;
                 r->items[y][x].collected = false;
                 r->items[y][x].symbol = ITEM_SYMBOL;
             } else {
-                // Tenta trappola
-                int trap_rand = rand() % 50;
+                int trap_rand = rand_r(seed) % 50;
                 if (trap_rand == 0) {
-                    // Trappola!
                     r->items[y][x].type = ITEM_TRAP;
                     r->items[y][x].collected = false;
                     r->items[y][x].symbol = TRAP_SYMBOL;
                 } else {
-                    // Tenta item normale
-                    int normal_rand = rand() % 25;
+                    int normal_rand = rand_r(seed) % 25;
                     if (normal_rand == 0) {
-                        // Item normale
                         r->items[y][x].type = ITEM_NORMAL;
                         r->items[y][x].collected = false;
                         r->items[y][x].symbol = ITEM_SYMBOL;
                     } else {
-                        // Cella vuota
                         r->items[y][x].type = ITEM_NONE;
                         r->items[y][x].collected = true;
                         r->items[y][x].symbol = ' ';
@@ -163,11 +153,11 @@ Item* room_get_item(Room *r, int x, int y) {
 }
 
 Dungeon* dungeon_create(int num_rooms, int room_width, int room_height) {
-    Dungeon *d = (Dungeon*)malloc(sizeof(Dungeon));
+    Dungeon *d = malloc(sizeof(Dungeon));
     if (!d) return NULL;
 
     d->num_rooms = num_rooms;
-    d->rooms = (Room**)malloc(num_rooms * sizeof(Room*));
+    d->rooms = malloc(num_rooms * sizeof(Room*));
     if (!d->rooms) {
         free(d);
         return NULL;

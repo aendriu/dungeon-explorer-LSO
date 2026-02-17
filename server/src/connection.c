@@ -1,5 +1,6 @@
 #define _POSIX_C_SOURCE 200112L
 #include "../header/connection.h"
+#include "../header/game_state.h"
 #include <arpa/inet.h>
 #include <ifaddrs.h>
 #include <netinet/in.h>
@@ -45,7 +46,7 @@ void init_welcome_sock() {
 
 void sockets_free(Conn* socks, int size) {
     close(welcome_sock);
-    for(int i = 0; i < size; i++) {
+    for(int i = 0; i < size && i < MAX_PLAYERS; i++) {
         if(socks[i].sockfd != 0)
             close(socks[i].sockfd);
     }
@@ -60,6 +61,14 @@ int socket_create() {
         perror("[SERVER] - socket()");
         exit(1);
     }
+
+    int optval = 1;
+    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) == -1) {
+        perror("[SERVER] - setsockopt(SO_REUSEADDR)");
+        close(sockfd);
+        exit(1);
+    }
+
     return sockfd;
 }
 
@@ -68,6 +77,7 @@ void socket_bind(int sockfd) {
     if(res == -1) {
         close(sockfd);
         perror("[SERVER] - bind()");
+        exit(1);
     }
 }
 

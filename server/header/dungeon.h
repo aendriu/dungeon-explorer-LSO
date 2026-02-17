@@ -1,5 +1,5 @@
-#ifndef DUNGEON
-#define DUNGEON
+#ifndef SERVER_DUNGEON_H
+#define SERVER_DUNGEON_H
 
 #include <stdbool.h>
 #include <pthread.h>
@@ -9,10 +9,6 @@
 #define MONSTER_SYMBOL 'M'
 #define DOOR_ENTRANCE 'E'
 #define DOOR_EXIT 'U'
-#define PLAYER_1_SYMBOL '@'
-#define PLAYER_2_SYMBOL '#'
-#define PLAYER_3_SYMBOL '$'
-#define PLAYER_4_SYMBOL '%'
 
 typedef enum {
     ITEM_NONE,

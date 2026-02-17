@@ -16,6 +16,7 @@ typedef struct {
   int room_h;
   int room_w;
   int **room_items;
+  int **room_monsters;
   int quest_items_collected;
   int team_lives;
 } GameState;

@@ -103,6 +103,10 @@ static void render_room(WINDOW *win, const GameState *state, int py, int px,
       char ch = ' ';
       if (y == 0 || y == ROOM_H - 1 || x == 0 || x == ROOM_W - 1) {
         ch = '#';
+      } else if (state->room_monsters != NULL &&
+                 y < state->room_h && x < state->room_w &&
+                 state->room_monsters[y][x] != 0) {
+        ch = 'M'; /* monster */
       } else if (state->room_items != NULL &&
                  y < state->room_h && x < state->room_w &&
                  state->room_items[y][x] != 0) {
@@ -614,7 +618,7 @@ static int parse_connected_players(const char *reply) {
 }
 
 int lobby_screen(void) {
-  static int my_player_id = -1;
+  int my_player_id = -1;
   init_ncurses();
   keypad(stdscr, TRUE);
 

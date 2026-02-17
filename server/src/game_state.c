@@ -8,7 +8,12 @@
 #include <string.h>
 #include <time.h>
 
-Team team;
+Team team = {
+    .shared_lives = 3,
+    .lives_mutex  = PTHREAD_MUTEX_INITIALIZER
+};
+
+static unsigned int g_rand_seed = 0;
 
 GameState game_state = {
     .map_size   = MAP_SIZE,
@@ -28,7 +33,7 @@ static void add_corridor(int map[MAP_SIZE][MAP_SIZE], int i, int j) {
 
 static void shuffle(int *arr, int n) {
     for (int i = n - 1; i > 0; i--) {
-        int j = rand() % (i + 1);
+        int j = rand_r(&g_rand_seed) % (i + 1);
         int tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
     }
 }
@@ -42,29 +47,29 @@ static void generate_random_map(int map[MAP_SIZE][MAP_SIZE]) {
         add_corridor(map, order[i], order[i + 1]);
     }
 
-    int extras = 2 + rand() % 3;
+    int extras = 2 + rand_r(&g_rand_seed) % 3;
     for (int i = 0; i < extras; i++) {
-        int a = rand() % MAP_SIZE;
-        int b = rand() % MAP_SIZE;
+        int a = rand_r(&g_rand_seed) % MAP_SIZE;
+        int b = rand_r(&g_rand_seed) % MAP_SIZE;
         add_corridor(map, a, b);
     }
 }
 
 void init_teams(void) {
+    pthread_mutex_lock(&team.lives_mutex);
     team.shared_lives = 3;
-    pthread_mutex_init(&team.lives_mutex, NULL);
+    pthread_mutex_unlock(&team.lives_mutex);
     printf("- team initialized with 3 shared lives\n");
 }
 
-void init_game_state_if_needed(void) {
-    static int seeded = 0;
-    if (!seeded) {
-        seeded = 1;
-        srand((unsigned int)time(NULL));
-    }
+unsigned int *get_rand_seed(void) {
+    return &g_rand_seed;
+}
 
+void init_game_state_if_needed(void) {
     pthread_mutex_lock(&game_state.mutex);
     if (!game_state.started) {
+        g_rand_seed = (unsigned int)time(NULL);
         memset(game_state.map, 0, sizeof(game_state.map));
         generate_random_map(game_state.map);
         for (int i = 0; i < MAX_PLAYERS; i++) {
@@ -79,7 +84,6 @@ void init_game_state_if_needed(void) {
         }
         game_dungeon = dungeon_create(MAP_SIZE, ROOM_W, ROOM_H);
         if (game_dungeon) {
-            pthread_mutex_init(&quest_items_mutex, NULL);
             quest_items_collected = 0;
             for (int i = 0; i < MAP_SIZE; i++) {
                 room_generate_items(game_dungeon->rooms[i]);
@@ -156,6 +160,20 @@ char *build_game_state_json(int player_id, const char *error) {
                         cJSON_AddItemToArray(row, cJSON_CreateNumber(val));
                     }
                     cJSON_AddItemToArray(items, row);
+                }
+            }
+
+            cJSON *monsters = cJSON_AddArrayToObject(root, "room_monsters");
+            if (monsters != NULL) {
+                for (int y = 0; y < room->height; y++) {
+                    cJSON *row = cJSON_CreateArray();
+                    if (row == NULL) break;
+                    for (int x = 0; x < room->width; x++) {
+                        Monster *m = &room->monsters[y][x];
+                        int val = m->alive ? 1 : 0;
+                        cJSON_AddItemToArray(row, cJSON_CreateNumber(val));
+                    }
+                    cJSON_AddItemToArray(monsters, row);
                 }
             }
         }

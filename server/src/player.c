@@ -70,14 +70,11 @@ void print_player_items(int player_id) {
 }
 
 void broadcast_all_inventories(void) {
-    if (plid_seq <= 0) {
-        return;
-    }
-
     cJSON *root = cJSON_CreateObject();
     cJSON *players_arr = cJSON_CreateArray();
 
-    for (int i = 0; i < plid_seq; i++) {
+    pthread_mutex_lock(&conn_mutex);
+    for (int i = 0; i < MAX_PLAYERS; i++) {
         if (connections[i].sockfd == 0) continue;
 
         cJSON *player_obj = cJSON_CreateObject();
@@ -101,12 +98,12 @@ void broadcast_all_inventories(void) {
     cJSON_AddItemToObject(root, "inventories", players_arr);
     char *json_str = cJSON_Print(root);
 
-    // Invia a tutti i giocatori
-    for (int i = 0; i < plid_seq; i++) {
+    for (int i = 0; i < MAX_PLAYERS; i++) {
         if (connections[i].sockfd != 0) {
             send_all(connections[i].sockfd, json_str, strlen(json_str) + 1);
         }
     }
+    pthread_mutex_unlock(&conn_mutex);
 
     cJSON_free(json_str);
     cJSON_Delete(root);
@@ -156,6 +153,7 @@ void init_newplayer(int sockfd, Conn *connections) {
     return;
   }
 
+  pthread_detach(tid);
   connections[idx].tid = tid;
   plid_seq += 1;
   pthread_mutex_unlock(&plid_mutex);
@@ -163,137 +161,58 @@ void init_newplayer(int sockfd, Conn *connections) {
 
 int player_lose_life() {
     pthread_mutex_lock(&team.lives_mutex);
-    team.shared_lives--;
+    if (team.shared_lives > 0)
+        team.shared_lives--;
     int remaining_lives = team.shared_lives;
-    printf("[TEAM] Player lost a life! Remaining: %d\n", remaining_lives);
     pthread_mutex_unlock(&team.lives_mutex);
-
-    if (remaining_lives <= 0) {
-        printf("[TEAM] TEAM DEFEATED!\n");
-        broadcast_all_inventories();
-        sleep(1);
-        for (int i = 0; i < MAX_PLAYERS; i++) {
-            if (connections[i].sockfd != 0) {
-                send_all(connections[i].sockfd, MSG_TEAM_DEFEATED,
-                         strlen(MSG_TEAM_DEFEATED) + 1);
-            }
-        }
-    } else {
-        char life_msg[64];
-        snprintf(life_msg, sizeof(life_msg), "%s:%d",
-                 MSG_LIFE_LOST, remaining_lives);
-        for (int i = 0; i < MAX_PLAYERS; i++) {
-            if (connections[i].sockfd != 0) {
-                send_all(connections[i].sockfd, life_msg,
-                         strlen(life_msg) + 1);
-            }
-        }
-    }
-
+    printf("[TEAM] Lost a life! Remaining: %d\n", remaining_lives);
     return remaining_lives;
 }
 
 bool player_collect_item(int player_id, int x, int y) {
-    if (!game_dungeon) {
-        return false;
-    }
+    if (!game_dungeon) return false;
 
     int room_id = (player_id >= 0 && player_id < MAX_PLAYERS)
-                      ? game_state.positions[player_id]
-                      : -1;
-    if (room_id < 0)
-        return false;
+                      ? game_state.positions[player_id] : -1;
+    if (room_id < 0) return false;
 
-    // Recupera l'item prima di collezionarlo (per salvarlo nell'inventory)
     Room *r = dungeon_get_room(game_dungeon, room_id);
     Item *item = room_get_item(r, x, y);
-    ItemType collected_type = ITEM_NONE;
-    if (item) {
-        collected_type = item->type;
-    }
+    if (!item) return false;
 
+    ItemType t = item->type;
     bool team_won = item_collect(game_dungeon, player_id, room_id, x, y);
 
-    // Gestione trappola: fa perdere una vita
-    if (collected_type == ITEM_TRAP) {
-        // Incrementa il contatore delle trappole del player
-        if (player_id >= 0 && player_id < MAX_PLAYERS) {
+    if (t == ITEM_TRAP) {
+        if (player_id >= 0 && player_id < MAX_PLAYERS)
             connections[player_id].traps_triggered++;
-        }
-        
-        char trap_msg[256];
-        snprintf(trap_msg, sizeof(trap_msg), "[PLAYER %d] Ha attivato una TRAPPOLA!", player_id);
-        for (int i = 0; i < plid_seq; i++) {
-            if (connections[i].sockfd != 0) {
-                send_all(connections[i].sockfd, trap_msg, strlen(trap_msg) + 1);
-            }
-        }
-        
-        int remaining = player_lose_life();
-        if (remaining <= 0) {
-            return true; // Team defeated
-        }
+        player_lose_life();
         return false;
     }
 
-    // Aggiungi l'item all'inventory del player se è un item valido (non trappola)
-    if (collected_type != ITEM_NONE && collected_type != ITEM_TRAP && player_id >= 0 && player_id < MAX_PLAYERS) {
-        Conn *player = &connections[player_id];
-        if (player->items_collected < MAX_ITEMS_PER_PLAYER) {
-            player->items[player->items_collected] = *item;
-            player->items_collected++;
-
-            if (collected_type == ITEM_QUEST) {
-                player->quest_items_count++;
-            } else if (collected_type == ITEM_NORMAL) {
-                player->normal_items_count++;
-            }
+    if (player_id >= 0 && player_id < MAX_PLAYERS) {
+        Conn *p = &connections[player_id];
+        if (p->items_collected < MAX_ITEMS_PER_PLAYER) {
+            p->items[p->items_collected] = *item;
+            p->items_collected++;
+            if (t == ITEM_QUEST)  p->quest_items_count++;
+            if (t == ITEM_NORMAL) p->normal_items_count++;
         }
     }
 
-    if (team_won) {
-        printf("[GAME] TEAM WON! All quest items collected!\n");
-        broadcast_all_inventories();
-        sleep(1);
-        // Inviare il messaggio di vittoria a tutti i giocatori
-        for (int i = 0; i < plid_seq; i++) {
-            if (connections[i].sockfd != 0) {
-                send_all(connections[i].sockfd, MSG_TEAM_WON, strlen(MSG_TEAM_WON) + 1);
-            }
-        }
-        return true;
-    }
-
-    // Broadcast item collected message with player name
-    char item_msg[256];
-    snprintf(item_msg, sizeof(item_msg), "[PLAYER %d] Hai preso un oggetto!", player_id);
-    for (int i = 0; i < plid_seq; i++) {
-        if (connections[i].sockfd != 0) {
-            send_all(connections[i].sockfd, item_msg, strlen(item_msg) + 1);
-        }
-    }
-
-    // Inviare aggiornamento del quest status ai giocatori
-    char quest_msg[256];
-    snprintf(quest_msg, sizeof(quest_msg), "%s:%d", MSG_QUEST_UPDATE, quest_items_collected);
-    for (int i = 0; i < plid_seq; i++) {
-        if (connections[i].sockfd != 0) {
-            send_all(connections[i].sockfd, quest_msg, strlen(quest_msg) + 1);
-        }
-    }
-
-    return false;
+    return team_won;
 }
 
 void *handle_player(void *args) {
   Conn *myconn = (Conn *)args;
-  printf("Im handling player!\n");
-  while (1) {
+  printf("[SERVER] Handling player %d\n", myconn->player_id);
+  while (server_running) {
     char msg[FRAME_SIZE];
     memset(msg, 0, sizeof(msg));
 
-    int r = recv(myconn->sockfd, msg, sizeof(msg), 0);
+    ssize_t r = recv(myconn->sockfd, msg, sizeof(msg), 0);
     if (r < 0) {
+      if (errno == EINTR) continue;
       perror("[server, recv, handle_player]");
       break;
     }
@@ -306,7 +225,7 @@ void *handle_player(void *args) {
     ClientRequest req = parse_client_request(msg);
     manage_response(req.cmd, &req, myconn, response, sizeof(response));
 
-    if (send(myconn->sockfd, response, sizeof(response), 0) < 0) {
+    if (send_all(myconn->sockfd, response, sizeof(response)) < 0) {
       break;
     }
   }

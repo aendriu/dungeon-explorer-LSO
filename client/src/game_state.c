@@ -21,11 +21,18 @@ void free_game_state(GameState *state) {
     }
     free(state->room_items);
   }
+  if (state->room_monsters != NULL) {
+    for (int i = 0; i < state->room_h; i++) {
+      free(state->room_monsters[i]);
+    }
+    free(state->room_monsters);
+  }
   state->adj = NULL;
   state->players = NULL;
   state->pos_y = NULL;
   state->pos_x = NULL;
   state->room_items = NULL;
+  state->room_monsters = NULL;
   state->room_h = 0;
   state->room_w = 0;
   state->map_size = 0;
@@ -174,6 +181,29 @@ int parse_game_state(const char *json, GameState *state, char *err_buf,
           cJSON *cell = cJSON_GetArrayItem(row, x);
           if (cJSON_IsNumber(cell)) {
             state->room_items[y][x] = cell->valueint;
+          }
+        }
+      }
+    }
+  }
+
+  cJSON *jmonsters = cJSON_GetObjectItemCaseSensitive(root, "room_monsters");
+  if (cJSON_IsArray(jmonsters) && state->room_h > 0 && state->room_w > 0) {
+    state->room_monsters = (int **)calloc(state->room_h, sizeof(int *));
+    if (state->room_monsters != NULL) {
+      for (int y = 0; y < state->room_h; y++) {
+        state->room_monsters[y] = (int *)calloc(state->room_w, sizeof(int));
+      }
+      int mrows = cJSON_GetArraySize(jmonsters);
+      for (int y = 0; y < mrows && y < state->room_h; y++) {
+        cJSON *row = cJSON_GetArrayItem(jmonsters, y);
+        if (!cJSON_IsArray(row))
+          continue;
+        int mcols = cJSON_GetArraySize(row);
+        for (int x = 0; x < mcols && x < state->room_w; x++) {
+          cJSON *cell = cJSON_GetArrayItem(row, x);
+          if (cJSON_IsNumber(cell)) {
+            state->room_monsters[y][x] = cell->valueint;
           }
         }
       }

@@ -1,5 +1,6 @@
 #define _POSIX_C_SOURCE 200112L
 #include "../header/connection.h"
+#include <sys/time.h>
 
 int sock = -1;
 struct addrinfo *servinfo = NULL;
@@ -42,6 +43,11 @@ int connect_to_server(const char *host, const char *port) {
         return -1;
     }
 
+    if (sock != -1) {
+        close(sock);
+        sock = -1;
+    }
+
     init_servinfo(host, port);
     socket_create();
 	if (connect(sock, servinfo->ai_addr, servinfo->ai_addrlen) == -1) {
@@ -50,6 +56,11 @@ int connect_to_server(const char *host, const char *port) {
         sock = -1;
         return -1;
 	}
+
+    struct timeval tv;
+    tv.tv_sec = 1;
+    tv.tv_usec = 0;
+    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 
     return 0;
 }

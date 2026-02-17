@@ -13,9 +13,9 @@ UserChoice choice;
 
 int main() {
   init_ncurses();
-  signal(SIGINT, sig_handlr_shutdown);
+  install_signal_handlers();
 
-  while (1) {
+  while (client_running) {
     if (choice == MENU_ENTERLOBBY || choice == MENU_QUIT) {
       choice = welcome_menu();
     }
@@ -24,6 +24,8 @@ int main() {
       break;
     }
   }
+
+  endwin();
 
   if (sock != -1) {
     close(sock);
@@ -34,7 +36,6 @@ int main() {
     servinfo = NULL;
   }
 
-  endwin();
   return 0;
 }
 

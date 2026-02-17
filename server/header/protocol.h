@@ -1,5 +1,5 @@
-#ifndef PROTOCOL_H
-#define PROTOCOL_H
+#ifndef SERVER_PROTOCOL_H
+#define SERVER_PROTOCOL_H
 
 #include "../../utils/enums.h"
 #include "connection.h"   /* Conn */

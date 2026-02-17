@@ -1,5 +1,6 @@
 #include "../header/protocol.h"
 #include "../header/player.h"
+#include "../header/monster.h"
 #include "cJSON.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -58,8 +59,12 @@ ClientRequest parse_client_request(const char *msg) {
 
     if (*msg == '{')
         parse_json_request(msg, &req);
-    else
-        req.cmd = (Message)atoi(msg);
+    else {
+        char *endptr;
+        long val = strtol(msg, &endptr, 10);
+        if (endptr != msg && val >= 0)
+            req.cmd = (Message)val;
+    }
 
     return req;
 }
@@ -124,8 +129,20 @@ static void handle_update_player_position(const ClientRequest *req, Conn *conn,
 
         if (game_dungeon != NULL) {
             int rid = game_state.positions[conn->player_id];
-            item_collect(game_dungeon, conn->player_id, rid,
-                         req->pos_x, req->pos_y);
+            Room *r = dungeon_get_room(game_dungeon, rid);
+
+            bool team_won = player_collect_item(conn->player_id, req->pos_x, req->pos_y);
+
+            Monster *mon = room_get_monster(r, req->pos_x, req->pos_y);
+            if (mon) {
+                mon->alive  = false;
+                mon->symbol = ' ';
+                player_lose_life();
+            }
+
+            if (team_won) {
+                err = "team_won";
+            }
         }
     }
 

@@ -19,23 +19,18 @@ static char *sendnrecv_frame(const char *frame) {
     return NULL;
   }
 
-  struct timeval tv;
-  tv.tv_sec = 0;
-  tv.tv_usec = 350000;
-  (void)setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-
   char *reply = (char *)calloc(CLIENT_FRAME_SIZE + 1, 1);
   if (reply == NULL) {
     return NULL;
   }
 
-  int r = recv(sock, reply, CLIENT_FRAME_SIZE, 0);
+  ssize_t r = recv(sock, reply, CLIENT_FRAME_SIZE, 0);
   if (r <= 0) {
     free(reply);
     return NULL;
   }
 
-  reply[CLIENT_FRAME_SIZE] = '\0';
+  reply[r] = '\0';
   return reply;
 }
 

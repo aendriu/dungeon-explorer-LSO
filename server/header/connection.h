@@ -1,5 +1,5 @@
-#ifndef CONNECTION
-#define CONNECTION
+#ifndef SERVER_CONNECTION_H
+#define SERVER_CONNECTION_H
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -10,6 +10,7 @@
 #include <pthread.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <signal.h>
 #include "dungeon.h"
 
 #define PORT "9090"
@@ -20,6 +21,8 @@ extern int welcome_sock;
 extern bool si_initialized;
 extern struct addrinfo *servinfo;
 extern Dungeon *game_dungeon;
+extern volatile sig_atomic_t server_running;
+extern pthread_mutex_t conn_mutex;
 
 typedef struct {
     int sockfd;
@@ -29,10 +32,10 @@ typedef struct {
     int room_id;
     int x, y;
     char symbol;
-    Item items[MAX_ITEMS_PER_PLAYER];  // Array di item collezionati
-    int normal_items_count;             // Contatore item normali
-    int quest_items_count;              // Contatore item quest
-    int traps_triggered;                // Contatore trappole attivate
+    Item items[MAX_ITEMS_PER_PLAYER];
+    int normal_items_count;
+    int quest_items_count;
+    int traps_triggered;
 } Conn;
 
 void init_servinfo();
