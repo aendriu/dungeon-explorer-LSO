@@ -6,6 +6,7 @@
 
 #define ITEM_SYMBOL '?'
 #define TRAP_SYMBOL '?'
+#define MONSTER_SYMBOL 'M'
 #define DOOR_ENTRANCE 'E'
 #define DOOR_EXIT 'U'
 #define PLAYER_1_SYMBOL '@'
@@ -27,12 +28,19 @@ typedef struct {
     char symbol;
 } Item;
 
+typedef struct {
+    int x, y;
+    bool alive;
+    char symbol;
+} Monster;
+
 // Room è una stanza del dungeon
 typedef struct {
     int id;
     int width;
     int height;
-    Item **items;  // matrice 2D di items nella stanza
+    Item **items;      // matrice 2D di items nella stanza
+    Monster **monsters; // matrice 2D di mostri nella stanza
     int entrance_x, entrance_y;  // Coordinata porta di entrata
     int exit_x, exit_y;           // Coordinata porta di uscita
 } Room;

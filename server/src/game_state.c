@@ -1,6 +1,7 @@
 #include "../header/game_state.h"
 #include "../header/connection.h"
 #include "../header/player.h"
+#include "../header/monster.h"
 #include "../../utils/enums.h"
 #include "cJSON.h"
 #include <stdlib.h>
@@ -82,6 +83,7 @@ void init_game_state_if_needed(void) {
             quest_items_collected = 0;
             for (int i = 0; i < MAP_SIZE; i++) {
                 room_generate_items(game_dungeon->rooms[i]);
+                room_generate_monsters(game_dungeon->rooms[i]);
             }
         }
 
