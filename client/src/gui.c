@@ -75,7 +75,7 @@ static int update_state_from_reply(GameState *state, char *reply, char *status,
 }
 
 static void render_minimap(WINDOW *win, const GameState *state, int top, int left);
-static void show_end_stats(const GameState *state, bool won);
+static int show_end_stats(const GameState *state, bool won);
 
 static void render_room(WINDOW *win, const GameState *state, int py, int px,
                         const char *msg) {
@@ -278,17 +278,15 @@ static void render_game(WINDOW *win, const GameState *state, int py, int px,
 
 static int check_game_over(const GameState *state) {
   if (state->quest_items_collected >= QUEST_ITEMS_TO_WIN) {
-    show_end_stats(state, true);
-    return 1;
+    return show_end_stats(state, true) ? 2 : 1;
   }
   if (state->team_lives <= 0) {
-    show_end_stats(state, false);
-    return 1;
+    return show_end_stats(state, false) ? 2 : 1;
   }
   return 0;
 }
 
-static void show_end_stats(const GameState *state, bool won) {
+static int show_end_stats(const GameState *state, bool won) {
   WINDOW *win = newwin(0, 0, 0, 0);
   const char *title = won ? "HAI VINTO!" : "SCONFITTA!";
 
@@ -314,10 +312,20 @@ static void show_end_stats(const GameState *state, bool won) {
             QUEST_ITEMS_TO_WIN);
   mvwprintw(win, row++, 4, "Vite residue: %d", state->team_lives);
 
-  mvwprintw(win, row + 1, 2, "Premi un tasto per continuare...");
+  row++;
+  wattron(win, A_BOLD);
+  mvwprintw(win, row++, 2, "Rigiocare? (s/n)");
+  wattroff(win, A_BOLD);
   wrefresh(win);
-  wgetch(win);
+
+  int ch;
+  while ((ch = wgetch(win)) != ERR) {
+    if (ch == 's' || ch == 'S') { delwin(win); return 1; }
+    if (ch == 'n' || ch == 'N') { delwin(win); return 0; }
+  }
+
   delwin(win);
+  return 0;
 }
 
 static void show_inventories(const char *json_str) {
@@ -444,7 +452,8 @@ int game_screen(GameState *state) {
       }
       snprintf(status, sizeof(status), "Sei entrato nella stanza %d", target);
       render_game(win, state, py, px, status);
-      if (check_game_over(state)) break;
+      int go1 = check_game_over(state);
+      if (go1) { delwin(win); return go1; }
       continue;
     }
 
@@ -470,7 +479,8 @@ int game_screen(GameState *state) {
       render_game(win, state, py, px, NULL);
     }
     prev_lives = state->team_lives;
-    if (check_game_over(state)) break;
+    int go2 = check_game_over(state);
+    if (go2) { delwin(win); return go2; }
   }
 
   delwin(win);
@@ -858,8 +868,17 @@ int lobby_screen(void) {
           state.player_id < MAX_PLAYERS) {
         state.current_room = state.players[state.player_id];
       }
-      game_screen(&state);
+      int result = game_screen(&state);
       free_game_state(&state);
+
+      if (result == 2) {
+        /* Rigiocare: torna alla lobby */
+        win = newwin(win_h, win_w, win_y, win_x);
+        keypad(win, TRUE);
+        wtimeout(win, 400);
+        tick = 0;
+        continue;
+      }
       return -1;
     }
   }

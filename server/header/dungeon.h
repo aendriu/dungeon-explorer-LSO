@@ -28,6 +28,7 @@ typedef struct {
 typedef struct {
     int x, y;
     MonsterState state;
+    int target_player_id;  // id del giocatore inseguito (-1 se nessuno)
     char symbol;
 } Monster;
 

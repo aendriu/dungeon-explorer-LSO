@@ -140,6 +140,13 @@ static void handle_update_player_position(const ClientRequest *req, Conn *conn,
                 player_kill_monster(conn->player_id);
             }
 
+            /* Muovi i mostri che inseguono questo giocatore */
+            int monster_hits = room_move_monsters_toward_player(
+                r, conn->player_id, req->pos_y, req->pos_x);
+            for (int h = 0; h < monster_hits; h++) {
+                player_lose_life();
+            }
+
             if (team_won) {
                 dungeon_kill_all_monsters(game_dungeon);
                 err = "team_won";
@@ -173,6 +180,21 @@ static void handle_move_player(const ClientRequest *req, Conn *conn,
         game_state.positions[conn->player_id] = req->target_room;
         game_state.pos_y[conn->player_id]     = ROOM_H / 2;
         game_state.pos_x[conn->player_id]     = ROOM_W / 2;
+
+        /* Assegna i mostri della nuova stanza ai giocatori presenti */
+        if (game_dungeon != NULL) {
+            Room *r = dungeon_get_room(game_dungeon, req->target_room);
+            if (r != NULL) {
+                int pids[MAX_PLAYERS];
+                int np = 0;
+                for (int i = 0; i < MAX_PLAYERS; i++) {
+                    if (game_state.positions[i] == req->target_room)
+                        pids[np++] = i;
+                }
+                if (np > 0)
+                    room_assign_monsters_to_players(r, pids, np);
+            }
+        }
     }
 
     char *json = build_game_state_json(conn->player_id, err);

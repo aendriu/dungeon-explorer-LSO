@@ -35,6 +35,7 @@ void room_generate_monsters(Room *r) {
                 m->x = x;
                 m->y = y;
                 m->state = MONSTER_ALIVE;
+                m->target_player_id = -1;
                 m->symbol = MONSTER_SYMBOL;
                 r->monsters[y][x] = m;
             }
@@ -70,4 +71,67 @@ void dungeon_kill_all_monsters(Dungeon *d) {
             }
         }
     }
+}
+
+/* Assegna a ogni mostro vivo nella stanza un giocatore casuale da inseguire.
+   player_ids: array di player_id presenti nella stanza, num_players: quanti sono. */
+void room_assign_monsters_to_players(Room *r, int *player_ids, int num_players) {
+    if (!r || !player_ids || num_players <= 0) return;
+
+    unsigned int *seed = get_rand_seed();
+
+    for (int y = 0; y < r->height; y++) {
+        for (int x = 0; x < r->width; x++) {
+            Monster *m = r->monsters[y][x];
+            if (m == NULL) continue;
+            if (m->state == MONSTER_DEAD) continue;
+
+            int chosen = player_ids[rand_r(seed) % num_players];
+            m->target_player_id = chosen;
+            m->state = MONSTER_IN_PURSUIT;
+        }
+    }
+}
+
+/* Muove tutti i mostri che inseguono player_id di 1 passo verso (target_y, target_x).
+   Se un mostro raggiunge il giocatore viene deallocato.
+   Restituisce il numero di mostri che hanno raggiunto il giocatore. */
+int room_move_monsters_toward_player(Room *r, int player_id, int target_y, int target_x) {
+    if (!r) return 0;
+    int hits = 0;
+
+    for (int y = 0; y < r->height; y++) {
+        for (int x = 0; x < r->width; x++) {
+            Monster *m = r->monsters[y][x];
+            if (m == NULL || m->state != MONSTER_IN_PURSUIT) continue;
+            if (m->target_player_id != player_id) continue;
+
+            int new_x = m->x;
+            int new_y = m->y;
+
+            if (new_x < target_x) new_x++;
+            else if (new_x > target_x) new_x--;
+
+            if (new_y < target_y) new_y++;
+            else if (new_y > target_y) new_y--;
+
+            /* Se ha raggiunto il giocatore, dealloca */
+            if (new_x == target_x && new_y == target_y) {
+                r->monsters[y][x] = NULL;
+                free(m);
+                hits++;
+                continue;
+            }
+
+            /* Se la cella è libera, spostalo */
+            if (r->monsters[new_y][new_x] == NULL) {
+                r->monsters[y][x] = NULL;
+                r->monsters[new_y][new_x] = m;
+                m->x = new_x;
+                m->y = new_y;
+            }
+        }
+    }
+
+    return hits;
 }

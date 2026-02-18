@@ -70,6 +70,24 @@ unsigned int *get_rand_seed(void) {
 
 void init_game_state_if_needed(void) {
     pthread_mutex_lock(&game_state.mutex);
+
+    /* Se la partita è finita (vite esaurite o quest completata), resetta */
+    if (game_state.started) {
+        bool game_over = false;
+        pthread_mutex_lock(&team.lives_mutex);
+        if (team.shared_lives <= 0) game_over = true;
+        pthread_mutex_unlock(&team.lives_mutex);
+
+        pthread_mutex_lock(&quest_items_mutex);
+        if (quest_items_collected >= QUEST_ITEMS_TO_WIN) game_over = true;
+        pthread_mutex_unlock(&quest_items_mutex);
+
+        if (game_over) {
+            printf("[GAME] Partita terminata, reset per nuova partita\n");
+            game_state.started = false;
+        }
+    }
+
     if (!game_state.started) {
         g_rand_seed = (unsigned int)time(NULL);
         memset(game_state.map, 0, sizeof(game_state.map));
