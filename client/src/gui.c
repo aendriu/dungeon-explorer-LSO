@@ -75,6 +75,7 @@ static int update_state_from_reply(GameState *state, char *reply, char *status,
 }
 
 static void render_minimap(WINDOW *win, const GameState *state, int top, int left);
+static void show_end_stats(const GameState *state, bool won);
 
 static void render_room(WINDOW *win, const GameState *state, int py, int px,
                         const char *msg) {
@@ -275,22 +276,48 @@ static void render_game(WINDOW *win, const GameState *state, int py, int px,
   wrefresh(win);
 }
 
-static int check_game_over(WINDOW *win, const GameState *state) {
+static int check_game_over(const GameState *state) {
   if (state->quest_items_collected >= QUEST_ITEMS_TO_WIN) {
-    show_popup(win, "HAI VINTO!",
-               "Il team ha raccolto tutti gli oggetti quest!",
-               "Premi un tasto...");
-    wgetch(win);
+    show_end_stats(state, true);
     return 1;
   }
   if (state->team_lives <= 0) {
-    show_popup(win, "SCONFITTA!",
-               "Il team ha perso tutte le vite!",
-               "Premi un tasto...");
-    wgetch(win);
+    show_end_stats(state, false);
     return 1;
   }
   return 0;
+}
+
+static void show_end_stats(const GameState *state, bool won) {
+  WINDOW *win = newwin(0, 0, 0, 0);
+  const char *title = won ? "HAI VINTO!" : "SCONFITTA!";
+
+  werase(win);
+  box(win, 0, 0);
+  wattron(win, A_BOLD);
+  mvwprintw(win, 1, 2, "%s", title);
+  wattroff(win, A_BOLD);
+
+  int row = 3;
+  int player_label = (state->player_id >= 0) ? (state->player_id + 1) : 0;
+  mvwprintw(win, row++, 2, "Statistiche giocatore %d", player_label);
+  mvwprintw(win, row++, 4, "Mostri uccisi: %d", state->player_monsters_killed);
+  mvwprintw(win, row++, 4, "Item normali: %d", state->player_normal_items);
+  mvwprintw(win, row++, 4, "Item quest: %d", state->player_quest_items);
+  mvwprintw(win, row++, 4, "Totale item: %d", state->player_total_items);
+  mvwprintw(win, row++, 4, "Trappole attivate: %d", state->player_traps_triggered);
+
+  row++;
+  mvwprintw(win, row++, 2, "Statistiche team");
+  mvwprintw(win, row++, 4, "Mostri uccisi: %d", state->team_kills);
+  mvwprintw(win, row++, 4, "Quest: %d/%d", state->quest_items_collected,
+            QUEST_ITEMS_TO_WIN);
+  mvwprintw(win, row++, 4, "Vite residue: %d", state->team_lives);
+
+  mvwprintw(win, row + 1, 2, "Premi un tasto per continuare...");
+  wrefresh(win);
+  wgetch(win);
+  delwin(win);
 }
 
 static void show_inventories(const char *json_str) {
@@ -417,7 +444,7 @@ int game_screen(GameState *state) {
       }
       snprintf(status, sizeof(status), "Sei entrato nella stanza %d", target);
       render_game(win, state, py, px, status);
-      if (check_game_over(win, state)) break;
+      if (check_game_over(state)) break;
       continue;
     }
 
@@ -443,7 +470,7 @@ int game_screen(GameState *state) {
       render_game(win, state, py, px, NULL);
     }
     prev_lives = state->team_lives;
-    if (check_game_over(win, state)) break;
+    if (check_game_over(state)) break;
   }
 
   delwin(win);

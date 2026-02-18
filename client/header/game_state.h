@@ -19,6 +19,12 @@ typedef struct {
   int **room_monsters;
   int quest_items_collected;
   int team_lives;
+  int team_kills;
+  int player_normal_items;
+  int player_quest_items;
+  int player_total_items;
+  int player_traps_triggered;
+  int player_monsters_killed;
 } GameState;
 
 void free_game_state(GameState *state);

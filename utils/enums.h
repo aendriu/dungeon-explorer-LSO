@@ -15,6 +15,12 @@ typedef enum {
     UPDATE_PLAYER_POSITION
 } Message;
 
+typedef enum {
+    MONSTER_ALIVE,
+    MONSTER_IN_PURSUIT,
+    MONSTER_DEAD
+} MonsterState;
+
 #define MSG_TEAM_DEFEATED "TEAM_DEFEATED"
 #define MSG_TEAM_WON "TEAM_WON"
 #define MSG_QUEST_UPDATE "QUEST_UPDATE"

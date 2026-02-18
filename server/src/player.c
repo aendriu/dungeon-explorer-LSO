@@ -1,5 +1,6 @@
 #include "../header/player.h"
 #include "../header/game_state.h"
+#include "../header/monster.h"
 #include "../header/protocol.h"
 #include "../../utils/enums.h"
 #include "cJSON.h"
@@ -133,6 +134,7 @@ void init_newplayer(int sockfd, Conn *connections) {
   connections[idx].normal_items_count = 0;
   connections[idx].quest_items_count = 0;
   connections[idx].traps_triggered = 0;
+  connections[idx].monsters_killed = 0;
   memset(connections[idx].items, 0, sizeof(connections[idx].items));
 
   pthread_mutex_lock(&game_state.mutex);
@@ -166,7 +168,24 @@ int player_lose_life() {
     int remaining_lives = team.shared_lives;
     pthread_mutex_unlock(&team.lives_mutex);
     printf("[TEAM] Lost a life! Remaining: %d\n", remaining_lives);
+  if (remaining_lives <= 0 && game_dungeon != NULL) {
+    dungeon_kill_all_monsters(game_dungeon);
+  }
     return remaining_lives;
+}
+
+void player_kill_monster(int player_id) {
+  if (player_id < 0 || player_id >= MAX_PLAYERS) {
+    return;
+  }
+
+  pthread_mutex_lock(&conn_mutex);
+  connections[player_id].monsters_killed++;
+  pthread_mutex_unlock(&conn_mutex);
+
+  pthread_mutex_lock(&team.lives_mutex);
+  team.monsters_killed++;
+  pthread_mutex_unlock(&team.lives_mutex);
 }
 
 bool player_collect_item(int player_id, int x, int y) {

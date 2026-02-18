@@ -24,6 +24,7 @@ extern GameState game_state;
 
 typedef struct {
     int shared_lives;
+    int monsters_killed;
     pthread_mutex_t lives_mutex;
 } Team;
 

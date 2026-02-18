@@ -219,6 +219,30 @@ int parse_game_state(const char *json, GameState *state, char *err_buf,
   if (cJSON_IsNumber(jlives))
     state->team_lives = jlives->valueint;
 
+  cJSON *jkills = cJSON_GetObjectItemCaseSensitive(root, "team_kills");
+  if (cJSON_IsNumber(jkills))
+    state->team_kills = jkills->valueint;
+
+  cJSON *pstats = cJSON_GetObjectItemCaseSensitive(root, "player_stats");
+  if (cJSON_IsObject(pstats)) {
+    cJSON *pnormal = cJSON_GetObjectItemCaseSensitive(pstats, "normal_items");
+    cJSON *pquest = cJSON_GetObjectItemCaseSensitive(pstats, "quest_items");
+    cJSON *ptotal = cJSON_GetObjectItemCaseSensitive(pstats, "total_items");
+    cJSON *ptraps = cJSON_GetObjectItemCaseSensitive(pstats, "traps_triggered");
+    cJSON *pkills = cJSON_GetObjectItemCaseSensitive(pstats, "monsters_killed");
+
+    if (cJSON_IsNumber(pnormal))
+      state->player_normal_items = pnormal->valueint;
+    if (cJSON_IsNumber(pquest))
+      state->player_quest_items = pquest->valueint;
+    if (cJSON_IsNumber(ptotal))
+      state->player_total_items = ptotal->valueint;
+    if (cJSON_IsNumber(ptraps))
+      state->player_traps_triggered = ptraps->valueint;
+    if (cJSON_IsNumber(pkills))
+      state->player_monsters_killed = pkills->valueint;
+  }
+
   cJSON_Delete(root);
   return 0;
 }

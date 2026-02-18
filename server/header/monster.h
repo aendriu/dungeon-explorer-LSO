@@ -6,5 +6,6 @@
 
 void room_generate_monsters(Room *r);
 Monster* room_get_monster(Room *r, int x, int y);
+void dungeon_kill_all_monsters(Dungeon *d);
 
 #endif

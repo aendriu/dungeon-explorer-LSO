@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <pthread.h>
+#include "../../utils/enums.h"
 
 #define ITEM_SYMBOL '?'
 #define TRAP_SYMBOL '?'
@@ -26,7 +27,7 @@ typedef struct {
 
 typedef struct {
     int x, y;
-    bool alive;
+    MonsterState state;
     char symbol;
 } Monster;
 
@@ -36,7 +37,7 @@ typedef struct {
     int width;
     int height;
     Item **items;      // matrice 2D di items nella stanza
-    Monster **monsters; // matrice 2D di mostri nella stanza
+    Monster ***monsters; // matrice 2D di puntatori ai mostri nella stanza
     int entrance_x, entrance_y;  // Coordinata porta di entrata
     int exit_x, exit_y;           // Coordinata porta di uscita
 } Room;

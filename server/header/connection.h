@@ -36,6 +36,7 @@ typedef struct {
     int normal_items_count;
     int quest_items_count;
     int traps_triggered;
+    int monsters_killed;
 } Conn;
 
 void init_servinfo();

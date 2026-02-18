@@ -10,6 +10,7 @@
 
 Team team = {
     .shared_lives = 3,
+    .monsters_killed = 0,
     .lives_mutex  = PTHREAD_MUTEX_INITIALIZER
 };
 
@@ -58,6 +59,7 @@ static void generate_random_map(int map[MAP_SIZE][MAP_SIZE]) {
 void init_teams(void) {
     pthread_mutex_lock(&team.lives_mutex);
     team.shared_lives = 3;
+    team.monsters_killed = 0;
     pthread_mutex_unlock(&team.lives_mutex);
     printf("- team initialized with 3 shared lives\n");
 }
@@ -169,8 +171,8 @@ char *build_game_state_json(int player_id, const char *error) {
                     cJSON *row = cJSON_CreateArray();
                     if (row == NULL) break;
                     for (int x = 0; x < room->width; x++) {
-                        Monster *m = &room->monsters[y][x];
-                        int val = m->alive ? 1 : 0;
+                        Monster *m = room->monsters[y][x];
+                        int val = (m != NULL && m->state != MONSTER_DEAD) ? 1 : 0;
                         cJSON_AddItemToArray(row, cJSON_CreateNumber(val));
                     }
                     cJSON_AddItemToArray(monsters, row);
@@ -185,7 +187,29 @@ char *build_game_state_json(int player_id, const char *error) {
 
     pthread_mutex_lock(&team.lives_mutex);
     cJSON_AddNumberToObject(root, "team_lives", team.shared_lives);
+    cJSON_AddNumberToObject(root, "team_kills", team.monsters_killed);
     pthread_mutex_unlock(&team.lives_mutex);
+
+    cJSON *pstats = cJSON_AddObjectToObject(root, "player_stats");
+    if (pstats != NULL) {
+        int pid = (player_id >= 0 && player_id < MAX_PLAYERS) ? player_id : -1;
+        if (pid >= 0) {
+            pthread_mutex_lock(&conn_mutex);
+            Conn *p = &connections[pid];
+            cJSON_AddNumberToObject(pstats, "normal_items", p->normal_items_count);
+            cJSON_AddNumberToObject(pstats, "quest_items", p->quest_items_count);
+            cJSON_AddNumberToObject(pstats, "total_items", p->items_collected);
+            cJSON_AddNumberToObject(pstats, "traps_triggered", p->traps_triggered);
+            cJSON_AddNumberToObject(pstats, "monsters_killed", p->monsters_killed);
+            pthread_mutex_unlock(&conn_mutex);
+        } else {
+            cJSON_AddNumberToObject(pstats, "normal_items", 0);
+            cJSON_AddNumberToObject(pstats, "quest_items", 0);
+            cJSON_AddNumberToObject(pstats, "total_items", 0);
+            cJSON_AddNumberToObject(pstats, "traps_triggered", 0);
+            cJSON_AddNumberToObject(pstats, "monsters_killed", 0);
+        }
+    }
 
     char *json = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);

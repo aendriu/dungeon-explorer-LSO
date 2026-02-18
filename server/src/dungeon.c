@@ -48,7 +48,7 @@ Room* room_create(int id, int width, int height) {
         }
     }
 
-    r->monsters = malloc(height * sizeof(Monster*));
+    r->monsters = malloc(height * sizeof(Monster**));
     if (!r->monsters) {
         for (int i = 0; i < height; i++) {
             free(r->items[i]);
@@ -59,7 +59,7 @@ Room* room_create(int id, int width, int height) {
     }
 
     for (int i = 0; i < height; i++) {
-        r->monsters[i] = malloc(width * sizeof(Monster));
+        r->monsters[i] = malloc(width * sizeof(Monster*));
         if (!r->monsters[i]) {
             for (int j = 0; j < i; j++) {
                 free(r->monsters[j]);
@@ -76,10 +76,7 @@ Room* room_create(int id, int width, int height) {
 
     for (int y = 0; y < height; y++) {
         for (int x = 0; x < width; x++) {
-            r->monsters[y][x].x = x;
-            r->monsters[y][x].y = y;
-            r->monsters[y][x].alive = false;
-            r->monsters[y][x].symbol = ' ';
+            r->monsters[y][x] = NULL;
         }
     }
 
@@ -94,8 +91,12 @@ void room_destroy(Room *r) {
     }
     free(r->items);
 
-    for (int i = 0; i < r->height; i++) {
-        free(r->monsters[i]);
+    for (int y = 0; y < r->height; y++) {
+        for (int x = 0; x < r->width; x++) {
+            free(r->monsters[y][x]);
+            r->monsters[y][x] = NULL;
+        }
+        free(r->monsters[y]);
     }
     free(r->monsters);
 

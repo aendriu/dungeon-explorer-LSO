@@ -135,12 +135,13 @@ static void handle_update_player_position(const ClientRequest *req, Conn *conn,
 
             Monster *mon = room_get_monster(r, req->pos_x, req->pos_y);
             if (mon) {
-                mon->alive  = false;
-                mon->symbol = ' ';
-                player_lose_life();
+                free(mon);
+                r->monsters[req->pos_y][req->pos_x] = NULL;
+                player_kill_monster(conn->player_id);
             }
 
             if (team_won) {
+                dungeon_kill_all_monsters(game_dungeon);
                 err = "team_won";
             }
         }
