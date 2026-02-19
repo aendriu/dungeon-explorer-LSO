@@ -7,6 +7,59 @@
 int quest_items_collected = 0;
 pthread_mutex_t quest_items_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+/* ---------- Allocazione griglie per Room ---------- */
+
+static Item **alloc_item_grid(int width, int height) {
+    Item **grid = malloc(height * sizeof(Item *));
+    if (!grid) return NULL;
+
+    for (int y = 0; y < height; y++) {
+        grid[y] = malloc(width * sizeof(Item));
+        if (!grid[y]) {
+            for (int j = 0; j < y; j++) free(grid[j]);
+            free(grid);
+            return NULL;
+        }
+        for (int x = 0; x < width; x++) {
+            grid[y][x] = (Item){ .x = x, .y = y, .type = ITEM_NONE,
+                                 .collected = true, .symbol = ' ' };
+        }
+    }
+    return grid;
+}
+
+static Monster ***alloc_monster_grid(int width, int height) {
+    Monster ***grid = malloc(height * sizeof(Monster **));
+    if (!grid) return NULL;
+
+    for (int y = 0; y < height; y++) {
+        grid[y] = calloc(width, sizeof(Monster *));
+        if (!grid[y]) {
+            for (int j = 0; j < y; j++) free(grid[j]);
+            free(grid);
+            return NULL;
+        }
+    }
+    return grid;
+}
+
+static void free_item_grid(Item **grid, int height) {
+    if (!grid) return;
+    for (int i = 0; i < height; i++) free(grid[i]);
+    free(grid);
+}
+
+static void free_monster_grid(Monster ***grid, int width, int height) {
+    if (!grid) return;
+    for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) free(grid[y][x]);
+        free(grid[y]);
+    }
+    free(grid);
+}
+
+/* ---------- Room lifecycle ---------- */
+
 Room* room_create(int id, int width, int height) {
     Room *r = malloc(sizeof(Room));
     if (!r) return NULL;
@@ -14,92 +67,24 @@ Room* room_create(int id, int width, int height) {
     r->id = id;
     r->width = width;
     r->height = height;
-
     r->entrance_x = 0;
     r->entrance_y = 0;
     r->exit_x = width - 1;
     r->exit_y = height - 1;
 
-    r->items = malloc(height * sizeof(Item*));
-    if (!r->items) {
-        free(r);
-        return NULL;
-    }
+    r->items = alloc_item_grid(width, height);
+    if (!r->items) { free(r); return NULL; }
 
-    for (int i = 0; i < height; i++) {
-        r->items[i] = malloc(width * sizeof(Item));
-        if (!r->items[i]) {
-            for (int j = 0; j < i; j++) {
-                free(r->items[j]);
-            }
-            free(r->items);
-            free(r);
-            return NULL;
-        }
-    }
-
-    for (int y = 0; y < height; y++) {
-        for (int x = 0; x < width; x++) {
-            r->items[y][x].x = x;
-            r->items[y][x].y = y;
-            r->items[y][x].type = ITEM_NONE;
-            r->items[y][x].collected = true;
-            r->items[y][x].symbol = ' ';
-        }
-    }
-
-    r->monsters = malloc(height * sizeof(Monster**));
-    if (!r->monsters) {
-        for (int i = 0; i < height; i++) {
-            free(r->items[i]);
-        }
-        free(r->items);
-        free(r);
-        return NULL;
-    }
-
-    for (int i = 0; i < height; i++) {
-        r->monsters[i] = malloc(width * sizeof(Monster*));
-        if (!r->monsters[i]) {
-            for (int j = 0; j < i; j++) {
-                free(r->monsters[j]);
-            }
-            free(r->monsters);
-            for (int j = 0; j < height; j++) {
-                free(r->items[j]);
-            }
-            free(r->items);
-            free(r);
-            return NULL;
-        }
-    }
-
-    for (int y = 0; y < height; y++) {
-        for (int x = 0; x < width; x++) {
-            r->monsters[y][x] = NULL;
-        }
-    }
+    r->monsters = alloc_monster_grid(width, height);
+    if (!r->monsters) { free_item_grid(r->items, height); free(r); return NULL; }
 
     return r;
 }
 
 void room_destroy(Room *r) {
     if (!r) return;
-
-    for (int i = 0; i < r->height; i++) {
-        free(r->items[i]);
-    }
-    free(r->items);
-
-    for (int y = 0; y < r->height; y++) {
-        for (int x = 0; x < r->width; x++) {
-            free(r->monsters[y][x]);
-            r->monsters[y][x] = NULL;
-        }
-        free(r->monsters[y]);
-    }
-    free(r->monsters);
-
+    free_item_grid(r->items, r->height);
+    free_monster_grid(r->monsters, r->width, r->height);
     free(r);
 }
 
@@ -138,6 +123,60 @@ void room_generate_items(Room *r) {
     }
 
     printf("- Room %d items generated (%dx%d)\n", r->id, r->width, r->height);
+}
+
+void room_generate_monsters(Room *r) {
+    if (!r) return;
+    unsigned int *seed = get_rand_seed();
+
+    int spawn_x = r->width / 2;
+    int spawn_y = r->height / 2;
+
+    for (int y = 0; y < r->height; y++) {
+        for (int x = 0; x < r->width; x++) {
+            if (x == spawn_x && y == spawn_y) {
+                continue;
+            }
+
+            if (r->items[y][x].type != ITEM_NONE && !r->items[y][x].collected) {
+                continue;
+            }
+
+            int monster_rand = rand_r(seed) % 50;
+            if (r->monsters[y][x] != NULL) {
+                free(r->monsters[y][x]);
+                r->monsters[y][x] = NULL;
+            }
+            if (monster_rand == 0) {
+                Monster *m = malloc(sizeof(Monster));
+                if (!m) {
+                    continue;
+                }
+                m->x = x;
+                m->y = y;
+                m->state = MONSTER_ALIVE;
+                m->target_player_id = -1;
+                m->failed_moves = 0;
+                m->symbol = MONSTER_SYMBOL;
+                r->monsters[y][x] = m;
+            }
+        }
+    }
+
+    printf("- Room %d monsters generated (%dx%d)\n", r->id, r->width, r->height);
+}
+
+Monster* room_get_monster(Room *r, int x, int y) {
+    if (!r || x < 0 || x >= r->width || y < 0 || y >= r->height) {
+        return NULL;
+    }
+
+    Monster *monster = r->monsters[y][x];
+    if (monster == NULL || monster->state == MONSTER_DEAD) {
+        return NULL;
+    }
+
+    return monster;
 }
 
 Item* room_get_item(Room *r, int x, int y) {
