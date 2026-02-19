@@ -35,27 +35,31 @@ static void add_corridor(int map[MAP_SIZE][MAP_SIZE], int i, int j) {
 }
 
 static void shuffle(int *arr, int n) {
+    // rand_r is the thread-safe version of rand
     for (int i = n - 1; i > 0; i--) {
         int j = rand_r(&g_rand_seed) % (i + 1);
         int tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
     }
 }
 
+static void build_random_order(int order[MAP_SIZE]) {
+    // 1 2 3 4 5 6 ... MAP_SIZE-1
+    for (int i = 0; i < MAP_SIZE; i++) order[i] = i;
+    
+    // a caso: 6 2 4 1 5 MAP_SIZE-1 0 ... 4
+    shuffle(order + 1, MAP_SIZE - 1);
+}
+
 static void generate_random_map(int map[MAP_SIZE][MAP_SIZE]) {
     int order[MAP_SIZE];
-    for (int i = 0; i < MAP_SIZE; i++) order[i] = i;
-    shuffle(order + 1, MAP_SIZE - 1);
+    build_random_order(order);
 
     for (int i = 0; i < MAP_SIZE - 1; i++) {
+        // questo garantisce che tutte le stanze siano raggiungibili
+        // esempio: 0-6-2-4-1-5-MAP_SIZE-1
         add_corridor(map, order[i], order[i + 1]);
     }
 
-    int extras = 2 + rand_r(&g_rand_seed) % 3;
-    for (int i = 0; i < extras; i++) {
-        int a = rand_r(&g_rand_seed) % MAP_SIZE;
-        int b = rand_r(&g_rand_seed) % MAP_SIZE;
-        add_corridor(map, a, b);
-    }
 }
 
 void init_teams(void) {
@@ -119,93 +123,81 @@ void init_game_state_if_needed(void) {
     pthread_mutex_unlock(&game_state.mutex);
 }
 
-char *build_game_state_json(int player_id, const char *error) {
-    cJSON *root = cJSON_CreateObject();
-    if (root == NULL) return NULL;
+/* ---------- JSON helpers per build_game_state_json ---------- */
 
-    cJSON_AddNumberToObject(root, "map_size", game_state.map_size);
-    cJSON_AddNumberToObject(root, "player_id", player_id);
-    cJSON_AddNumberToObject(root, "current_room",
-                            (player_id >= 0 && player_id < MAX_PLAYERS)
-                                ? game_state.positions[player_id]
-                                : -1);
-    if (error != NULL) {
-        cJSON_AddStringToObject(root, "error", error);
-    }
+static void json_add_player_positions(cJSON *root) {
+    cJSON *arr = cJSON_AddArrayToObject(root, "players");
+    if (arr == NULL) return;
+    for (int i = 0; i < MAX_PLAYERS; i++)
+        cJSON_AddItemToArray(arr, cJSON_CreateNumber(game_state.positions[i]));
+}
 
-    cJSON *players_json = cJSON_AddArrayToObject(root, "players");
-    if (players_json == NULL) { cJSON_Delete(root); return NULL; }
-    for (int i = 0; i < MAX_PLAYERS; i++) {
-        cJSON_AddItemToArray(players_json, cJSON_CreateNumber(game_state.positions[i]));
-    }
-
+static void json_add_player_coords(cJSON *root) {
     cJSON *pos = cJSON_AddArrayToObject(root, "pos");
-    if (pos == NULL) { cJSON_Delete(root); return NULL; }
+    if (pos == NULL) return;
     for (int i = 0; i < MAX_PLAYERS; i++) {
         cJSON *pair = cJSON_CreateArray();
-        if (pair == NULL) { cJSON_Delete(root); return NULL; }
+        if (pair == NULL) return;
         cJSON_AddItemToArray(pair, cJSON_CreateNumber(game_state.pos_y[i]));
         cJSON_AddItemToArray(pair, cJSON_CreateNumber(game_state.pos_x[i]));
         cJSON_AddItemToArray(pos, pair);
     }
+}
 
+static void json_add_adjacency(cJSON *root) {
     cJSON *adj = cJSON_AddArrayToObject(root, "adj");
-    if (adj == NULL) { cJSON_Delete(root); return NULL; }
+    if (adj == NULL) return;
     for (int i = 0; i < game_state.map_size; i++) {
         cJSON *row = cJSON_CreateArray();
-        if (row == NULL) { cJSON_Delete(root); return NULL; }
-        for (int j = 0; j < game_state.map_size; j++) {
+        if (row == NULL) return;
+        for (int j = 0; j < game_state.map_size; j++)
             cJSON_AddItemToArray(row, cJSON_CreateNumber(game_state.map[i][j]));
-        }
         cJSON_AddItemToArray(adj, row);
     }
+}
 
-    int cur = (player_id >= 0 && player_id < MAX_PLAYERS)
-                  ? game_state.positions[player_id]
-                  : -1;
+static int item_to_val(const Item *it) {
+    if (it->collected || it->type == ITEM_NONE) return 0;
+    if (it->type == ITEM_QUEST) return 2;
+    if (it->type == ITEM_TRAP || it->type == ITEM_BOOBYTRAP) return 3;
+    return 1;
+}
+
+static void json_add_room(cJSON *root, int room_id) {
     cJSON_AddNumberToObject(root, "room_h", ROOM_H);
     cJSON_AddNumberToObject(root, "room_w", ROOM_W);
-    if (game_dungeon != NULL) {
-        Room *room = dungeon_get_room(game_dungeon, cur);
-        if (room != NULL) {
-            cJSON *items = cJSON_AddArrayToObject(root, "room_items");
-            if (items != NULL) {
-                for (int y = 0; y < room->height; y++) {
-                    cJSON *row = cJSON_CreateArray();
-                    if (row == NULL) break;
-                    for (int x = 0; x < room->width; x++) {
-                        Item *it = &room->items[y][x];
-                        int val = 0;
-                        if (!it->collected && it->type != ITEM_NONE) {
-                            if (it->type == ITEM_QUEST)
-                                val = 2;
-                            else if (it->type == ITEM_TRAP || it->type == ITEM_BOOBYTRAP)
-                                val = 3;
-                            else
-                                val = 1;
-                        }
-                        cJSON_AddItemToArray(row, cJSON_CreateNumber(val));
-                    }
-                    cJSON_AddItemToArray(items, row);
-                }
-            }
+    if (game_dungeon == NULL) return;
 
-            cJSON *monsters = cJSON_AddArrayToObject(root, "room_monsters");
-            if (monsters != NULL) {
-                for (int y = 0; y < room->height; y++) {
-                    cJSON *row = cJSON_CreateArray();
-                    if (row == NULL) break;
-                    for (int x = 0; x < room->width; x++) {
-                        Monster *m = room->monsters[y][x];
-                        int val = (m != NULL && m->state != MONSTER_DEAD) ? 1 : 0;
-                        cJSON_AddItemToArray(row, cJSON_CreateNumber(val));
-                    }
-                    cJSON_AddItemToArray(monsters, row);
-                }
-            }
+    Room *room = dungeon_get_room(game_dungeon, room_id);
+    if (room == NULL) return;
+
+    cJSON *items = cJSON_AddArrayToObject(root, "room_items");
+    if (items != NULL) {
+        for (int y = 0; y < room->height; y++) {
+            cJSON *row = cJSON_CreateArray();
+            if (row == NULL) break;
+            for (int x = 0; x < room->width; x++)
+                cJSON_AddItemToArray(row, cJSON_CreateNumber(item_to_val(&room->items[y][x])));
+            cJSON_AddItemToArray(items, row);
         }
     }
 
+    cJSON *monsters = cJSON_AddArrayToObject(root, "room_monsters");
+    if (monsters != NULL) {
+        for (int y = 0; y < room->height; y++) {
+            cJSON *row = cJSON_CreateArray();
+            if (row == NULL) break;
+            for (int x = 0; x < room->width; x++) {
+                Monster *m = room->monsters[y][x];
+                cJSON_AddItemToArray(row, cJSON_CreateNumber(
+                    (m != NULL && m->state != MONSTER_DEAD) ? 1 : 0));
+            }
+            cJSON_AddItemToArray(monsters, row);
+        }
+    }
+}
+
+static void json_add_team_stats(cJSON *root) {
     pthread_mutex_lock(&quest_items_mutex);
     cJSON_AddNumberToObject(root, "quest_items_collected", quest_items_collected);
     pthread_mutex_unlock(&quest_items_mutex);
@@ -214,27 +206,52 @@ char *build_game_state_json(int player_id, const char *error) {
     cJSON_AddNumberToObject(root, "team_lives", team.shared_lives);
     cJSON_AddNumberToObject(root, "team_kills", team.monsters_killed);
     pthread_mutex_unlock(&team.lives_mutex);
+}
 
+static void json_add_player_stats(cJSON *root, int player_id) {
     cJSON *pstats = cJSON_AddObjectToObject(root, "player_stats");
-    if (pstats != NULL) {
-        int pid = (player_id >= 0 && player_id < MAX_PLAYERS) ? player_id : -1;
-        if (pid >= 0) {
-            pthread_mutex_lock(&conn_mutex);
-            Player *p = &players[pid];
-            cJSON_AddNumberToObject(pstats, "normal_items", p->normal_items_count);
-            cJSON_AddNumberToObject(pstats, "quest_items", p->quest_items_count);
-            cJSON_AddNumberToObject(pstats, "total_items", p->items_collected);
-            cJSON_AddNumberToObject(pstats, "traps_triggered", p->traps_triggered);
-            cJSON_AddNumberToObject(pstats, "monsters_killed", p->monsters_killed);
-            pthread_mutex_unlock(&conn_mutex);
-        } else {
-            cJSON_AddNumberToObject(pstats, "normal_items", 0);
-            cJSON_AddNumberToObject(pstats, "quest_items", 0);
-            cJSON_AddNumberToObject(pstats, "total_items", 0);
-            cJSON_AddNumberToObject(pstats, "traps_triggered", 0);
-            cJSON_AddNumberToObject(pstats, "monsters_killed", 0);
-        }
+    if (pstats == NULL) return;
+
+    int pid = (player_id >= 0 && player_id < MAX_PLAYERS) ? player_id : -1;
+    if (pid >= 0) {
+        pthread_mutex_lock(&conn_mutex);
+        Player *p = &players[pid];
+        cJSON_AddNumberToObject(pstats, "normal_items",     p->normal_items_count);
+        cJSON_AddNumberToObject(pstats, "quest_items",      p->quest_items_count);
+        cJSON_AddNumberToObject(pstats, "total_items",      p->items_collected);
+        cJSON_AddNumberToObject(pstats, "traps_triggered",  p->traps_triggered);
+        cJSON_AddNumberToObject(pstats, "monsters_killed",  p->monsters_killed);
+        pthread_mutex_unlock(&conn_mutex);
+    } else {
+        cJSON_AddNumberToObject(pstats, "normal_items",     0);
+        cJSON_AddNumberToObject(pstats, "quest_items",      0);
+        cJSON_AddNumberToObject(pstats, "total_items",      0);
+        cJSON_AddNumberToObject(pstats, "traps_triggered",  0);
+        cJSON_AddNumberToObject(pstats, "monsters_killed",  0);
     }
+}
+
+/* ---------- build_game_state_json ---------- */
+
+char *build_game_state_json(int player_id, const char *error) {
+    cJSON *root = cJSON_CreateObject();
+    if (root == NULL) return NULL;
+
+    int cur = (player_id >= 0 && player_id < MAX_PLAYERS)
+                  ? game_state.positions[player_id] : -1;
+
+    cJSON_AddNumberToObject(root, "map_size",     game_state.map_size);
+    cJSON_AddNumberToObject(root, "player_id",    player_id);
+    cJSON_AddNumberToObject(root, "current_room", cur);
+    if (error != NULL)
+        cJSON_AddStringToObject(root, "error", error);
+
+    json_add_player_positions(root);
+    json_add_player_coords(root);
+    json_add_adjacency(root);
+    json_add_room(root, cur);
+    json_add_team_stats(root);
+    json_add_player_stats(root, player_id);
 
     char *json = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);
