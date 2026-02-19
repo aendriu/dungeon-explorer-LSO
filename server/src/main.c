@@ -38,6 +38,7 @@ static void cleanup(void) {
 
 int main(void) {
     memset(connections, 0, sizeof(connections));
+    memset(players, 0, sizeof(players));
     init_welcome_sock();
     install_signal_handlers();
 

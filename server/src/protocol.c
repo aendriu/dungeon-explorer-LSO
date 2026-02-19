@@ -97,6 +97,21 @@ static void handle_start_game(Conn *conn, char *response, size_t res_len) {
         game_state.positions[conn->player_id] = 0;
         game_state.pos_y[conn->player_id]     = ROOM_H / 2;
         game_state.pos_x[conn->player_id]     = ROOM_W / 2;
+
+        /* Assegna i mostri della stanza 0 ai giocatori presenti */
+        if (game_dungeon != NULL) {
+            Room *r = dungeon_get_room(game_dungeon, 0);
+            if (r != NULL) {
+                int pids[MAX_PLAYERS];
+                int np = 0;
+                for (int i = 0; i < MAX_PLAYERS; i++) {
+                    if (game_state.positions[i] == 0)
+                        pids[np++] = i;
+                }
+                if (np > 0)
+                    room_assign_monsters_to_players(r, pids, np);
+            }
+        }
     }
     char *json = build_game_state_json(conn->player_id, NULL);
     pthread_mutex_unlock(&game_state.mutex);

@@ -8,6 +8,8 @@
 #include <string.h>
 #include <time.h>
 
+Dungeon *game_dungeon = NULL;
+
 Team team = {
     .shared_lives = 3,
     .monsters_killed = 0,
@@ -131,10 +133,10 @@ char *build_game_state_json(int player_id, const char *error) {
         cJSON_AddStringToObject(root, "error", error);
     }
 
-    cJSON *players = cJSON_AddArrayToObject(root, "players");
-    if (players == NULL) { cJSON_Delete(root); return NULL; }
+    cJSON *players_json = cJSON_AddArrayToObject(root, "players");
+    if (players_json == NULL) { cJSON_Delete(root); return NULL; }
     for (int i = 0; i < MAX_PLAYERS; i++) {
-        cJSON_AddItemToArray(players, cJSON_CreateNumber(game_state.positions[i]));
+        cJSON_AddItemToArray(players_json, cJSON_CreateNumber(game_state.positions[i]));
     }
 
     cJSON *pos = cJSON_AddArrayToObject(root, "pos");
@@ -213,7 +215,7 @@ char *build_game_state_json(int player_id, const char *error) {
         int pid = (player_id >= 0 && player_id < MAX_PLAYERS) ? player_id : -1;
         if (pid >= 0) {
             pthread_mutex_lock(&conn_mutex);
-            Conn *p = &connections[pid];
+            Player *p = &players[pid];
             cJSON_AddNumberToObject(pstats, "normal_items", p->normal_items_count);
             cJSON_AddNumberToObject(pstats, "quest_items", p->quest_items_count);
             cJSON_AddNumberToObject(pstats, "total_items", p->items_collected);

@@ -6,6 +6,7 @@
 #include "cJSON.h"
 
 int plid_seq = 0;
+Player players[MAX_PLAYERS] = {0};
 
 static pthread_mutex_t plid_mutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -50,20 +51,20 @@ void print_player_items(int player_id) {
         return;
     }
 
-    Conn *player = &connections[player_id];
+    Player *ps = &players[player_id];
     printf("\n========================================\n");
     printf("INVENTORY PLAYER %d:\n", player_id);
-    printf("- Item Normali: %d\n", player->normal_items_count);
-    printf("- Item Quest: %d\n", player->quest_items_count);
-    printf("- Total Items: %d/%d\n", player->items_collected, MAX_ITEMS_PER_PLAYER);
-    printf("- Trappole Attivate: %d\n", player->traps_triggered);
+    printf("- Item Normali: %d\n", ps->normal_items_count);
+    printf("- Item Quest: %d\n", ps->quest_items_count);
+    printf("- Total Items: %d/%d\n", ps->items_collected, MAX_ITEMS_PER_PLAYER);
+    printf("- Trappole Attivate: %d\n", ps->traps_triggered);
     printf("\nDettagli:\n");
 
-    if (player->items_collected == 0) {
+    if (ps->items_collected == 0) {
         printf("  (Nessun item collezionato)\n");
     } else {
-        for (int i = 0; i < player->items_collected; i++) {
-            const char *type_str = (player->items[i].type == ITEM_QUEST) ? "QUEST" : "NORMAL";
+        for (int i = 0; i < ps->items_collected; i++) {
+            const char *type_str = (ps->items[i].type == ITEM_QUEST) ? "QUEST" : "NORMAL";
             printf("  [%d] %s\n", i + 1, type_str);
         }
     }
@@ -80,15 +81,15 @@ void broadcast_all_inventories(void) {
 
         cJSON *player_obj = cJSON_CreateObject();
         cJSON_AddNumberToObject(player_obj, "player_id", i);
-        cJSON_AddNumberToObject(player_obj, "normal_items", connections[i].normal_items_count);
-        cJSON_AddNumberToObject(player_obj, "quest_items", connections[i].quest_items_count);
-        cJSON_AddNumberToObject(player_obj, "total_items", connections[i].items_collected);
-        cJSON_AddNumberToObject(player_obj, "traps_triggered", connections[i].traps_triggered);
+        cJSON_AddNumberToObject(player_obj, "normal_items", players[i].normal_items_count);
+        cJSON_AddNumberToObject(player_obj, "quest_items", players[i].quest_items_count);
+        cJSON_AddNumberToObject(player_obj, "total_items", players[i].items_collected);
+        cJSON_AddNumberToObject(player_obj, "traps_triggered", players[i].traps_triggered);
 
         cJSON *items_arr = cJSON_CreateArray();
-        for (int j = 0; j < connections[i].items_collected; j++) {
+        for (int j = 0; j < players[i].items_collected; j++) {
             cJSON *item_obj = cJSON_CreateObject();
-            const char *type_str = (connections[i].items[j].type == ITEM_QUEST) ? "QUEST" : "NORMAL";
+            const char *type_str = (players[i].items[j].type == ITEM_QUEST) ? "QUEST" : "NORMAL";
             cJSON_AddStringToObject(item_obj, "type", type_str);
             cJSON_AddItemToArray(items_arr, item_obj);
         }
@@ -130,12 +131,14 @@ void init_newplayer(int sockfd, Conn *connections) {
 
   connections[idx].player_id = idx;
   connections[idx].sockfd = sockfd;
-  connections[idx].items_collected = 0;
-  connections[idx].normal_items_count = 0;
-  connections[idx].quest_items_count = 0;
-  connections[idx].traps_triggered = 0;
-  connections[idx].monsters_killed = 0;
-  memset(connections[idx].items, 0, sizeof(connections[idx].items));
+
+  players[idx].player_id = idx;
+  players[idx].items_collected = 0;
+  players[idx].normal_items_count = 0;
+  players[idx].quest_items_count = 0;
+  players[idx].traps_triggered = 0;
+  players[idx].monsters_killed = 0;
+  memset(players[idx].items, 0, sizeof(players[idx].items));
 
   pthread_mutex_lock(&game_state.mutex);
   if (game_state.started) {
@@ -180,7 +183,7 @@ void player_kill_monster(int player_id) {
   }
 
   pthread_mutex_lock(&conn_mutex);
-  connections[player_id].monsters_killed++;
+  players[player_id].monsters_killed++;
   pthread_mutex_unlock(&conn_mutex);
 
   pthread_mutex_lock(&team.lives_mutex);
@@ -204,13 +207,13 @@ bool player_collect_item(int player_id, int x, int y) {
 
     if (t == ITEM_TRAP || t == ITEM_BOOBYTRAP) {
         if (player_id >= 0 && player_id < MAX_PLAYERS)
-            connections[player_id].traps_triggered++;
+            players[player_id].traps_triggered++;
         player_lose_life();
         return false;
     }
 
     if (player_id >= 0 && player_id < MAX_PLAYERS) {
-        Conn *p = &connections[player_id];
+        Player *p = &players[player_id];
         if (p->items_collected < MAX_ITEMS_PER_PLAYER) {
             p->items[p->items_collected] = *item;
             p->items_collected++;

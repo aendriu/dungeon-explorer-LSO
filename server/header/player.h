@@ -4,6 +4,7 @@
 #include "../../utils/enums.h"
 #include "../header/connection.h"
 #include "../header/game_state.h"
+#include "../header/player_state.h"
 #include <errno.h>
 #include <pthread.h>
 #include <stdio.h>
@@ -14,6 +15,7 @@
 extern int plid_seq;
 
 extern Conn connections[MAX_PLAYERS];
+extern Player players[MAX_PLAYERS];
 
 int get_connected_players(void);
 

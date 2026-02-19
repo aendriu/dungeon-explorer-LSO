@@ -10,7 +10,6 @@ static const char *MSG_MAX_PLAYER_REACHED =
 int welcome_sock = 0;
 bool si_initialized = false;
 struct addrinfo *servinfo = NULL;
-Dungeon *game_dungeon = NULL;
 
 void init_servinfo() {
     struct addrinfo hints;

@@ -3,8 +3,11 @@
 
 #include <stdbool.h>
 #include <pthread.h>
+#include "dungeon.h"
 
 #define FRAME_SIZE 4096
+
+extern Dungeon *game_dungeon;
 #define MAP_SIZE   10
 #define ROOM_H      9
 #define ROOM_W     21

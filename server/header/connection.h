@@ -11,16 +11,13 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <signal.h>
-#include "dungeon.h"
 
 #define PORT "9090"
 #define BACKLOG 10
-#define MAX_ITEMS_PER_PLAYER 25
 
 extern int welcome_sock;
 extern bool si_initialized;
 extern struct addrinfo *servinfo;
-extern Dungeon *game_dungeon;
 extern volatile sig_atomic_t server_running;
 extern pthread_mutex_t conn_mutex;
 
@@ -28,15 +25,6 @@ typedef struct {
     int sockfd;
     pthread_t tid;
     int player_id;
-    int items_collected;
-    int room_id;
-    int x, y;
-    char symbol;
-    Item items[MAX_ITEMS_PER_PLAYER];
-    int normal_items_count;
-    int quest_items_count;
-    int traps_triggered;
-    int monsters_killed;
 } Conn;
 
 void init_servinfo();
