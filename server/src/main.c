@@ -3,6 +3,9 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <signal.h>
+#include <ifaddrs.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
 
 #include "../header/connection.h"
 #include "../header/player.h"
@@ -36,11 +39,31 @@ static void cleanup(void) {
     sockets_free(connections, MAX_PLAYERS);
 }
 
+static void print_local_ips(void) {
+    struct ifaddrs *ifaddr, *ifa;
+    if (getifaddrs(&ifaddr) == -1) {
+        perror("getifaddrs");
+        return;
+    }
+    printf("=== Server IPs (porta %s) ===\n", PORT);
+    for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+        if (ifa->ifa_addr == NULL || ifa->ifa_addr->sa_family != AF_INET)
+            continue;
+        char ip[INET_ADDRSTRLEN];
+        struct sockaddr_in *sa = (struct sockaddr_in *)ifa->ifa_addr;
+        inet_ntop(AF_INET, &sa->sin_addr, ip, sizeof(ip));
+        printf("  %s: %s\n", ifa->ifa_name, ip);
+    }
+    printf("=============================\n");
+    freeifaddrs(ifaddr);
+}
+
 int main(void) {
     memset(connections, 0, sizeof(connections));
     memset(players, 0, sizeof(players));
     init_welcome_sock();
     install_signal_handlers();
+    print_local_ips();
 
     while (server_running) {
         if (get_connected_players() < MAX_PLAYERS) {
