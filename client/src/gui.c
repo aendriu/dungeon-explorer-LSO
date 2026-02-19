@@ -5,8 +5,6 @@
 
 int start_y, start_x;
 
-enum { ROOM_H = 9, ROOM_W = 21 };
-
 static bool is_move_key(int ch, int *dy, int *dx) {
   *dy = 0;
   *dx = 0;
@@ -23,14 +21,14 @@ static bool is_move_key(int ch, int *dy, int *dx) {
   return true;
 }
 
-static int wall_dir(int new_y, int new_x) {
-  if (new_y == 0 && new_x == ROOM_W / 2)
+static int wall_dir(const GameState *state, int new_y, int new_x) {
+  if (new_y == 0 && new_x == state->room_w / 2)
     return 0; /* N */
-  if (new_x == ROOM_W - 1 && new_y == ROOM_H / 2)
+  if (new_x == state->room_w - 1 && new_y == state->room_h / 2)
     return 1; /* E */
-  if (new_y == ROOM_H - 1 && new_x == ROOM_W / 2)
+  if (new_y == state->room_h - 1 && new_x == state->room_w / 2)
     return 2; /* S */
-  if (new_x == 0 && new_y == ROOM_H / 2)
+  if (new_x == 0 && new_y == state->room_h / 2)
     return 3; /* W */
   return -1;
 }
@@ -40,7 +38,7 @@ static void sync_self_pos(const GameState *state, int *py, int *px) {
       state->player_id < MAX_PLAYERS) {
     int sy = state->pos_y[state->player_id];
     int sx = state->pos_x[state->player_id];
-    if (sy >= 1 && sy < ROOM_H - 1 && sx >= 1 && sx < ROOM_W - 1) {
+    if (sy >= 1 && sy < state->room_h - 1 && sx >= 1 && sx < state->room_w - 1) {
       *py = sy;
       *px = sx;
     }
@@ -81,8 +79,10 @@ static void render_room(WINDOW *win, const GameState *state, int py, int px,
                         const char *msg) {
   int win_h, win_w;
   getmaxyx(win, win_h, win_w);
-  int top = (win_h - ROOM_H) / 2;
-  int left = (win_w - ROOM_W) / 2;
+  int rh = state->room_h;
+  int rw = state->room_w;
+  int top = (win_h - rh) / 2;
+  int left = (win_w - rw) / 2;
   if (top < 4)
     top = 4;
   if (left < 2)
@@ -95,14 +95,14 @@ static void render_room(WINDOW *win, const GameState *state, int py, int px,
     mvwprintw(win, 3, 2, "%s", msg);
   }
 
-  for (int y = 0; y < ROOM_H; y++) {
-    for (int x = 0; x < ROOM_W; x++) {
+  for (int y = 0; y < rh; y++) {
+    for (int x = 0; x < rw; x++) {
       int wy = top + y;
       int wx = left + x;
       if (wy >= win_h - 1 || wx >= win_w - 1)
         continue;
       char ch = ' ';
-      if (y == 0 || y == ROOM_H - 1 || x == 0 || x == ROOM_W - 1) {
+      if (y == 0 || y == rh - 1 || x == 0 || x == rw - 1) {
         ch = '#';
       } else if (state->room_monsters != NULL &&
                  y < state->room_h && x < state->room_w &&
@@ -118,13 +118,13 @@ static void render_room(WINDOW *win, const GameState *state, int py, int px,
   }
 
   int door_y_n = top + 0;
-  int door_x_n = left + ROOM_W / 2;
-  int door_y_s = top + ROOM_H - 1;
-  int door_x_s = left + ROOM_W / 2;
-  int door_y_w = top + ROOM_H / 2;
+  int door_x_n = left + rw / 2;
+  int door_y_s = top + rh - 1;
+  int door_x_s = left + rw / 2;
+  int door_y_w = top + rh / 2;
   int door_x_w = left + 0;
-  int door_y_e = top + ROOM_H / 2;
-  int door_x_e = left + ROOM_W - 1;
+  int door_y_e = top + rh / 2;
+  int door_x_e = left + rw - 1;
 
   if (door_target_for_dir(state, 0) != -1)
     mvwaddch(win, door_y_n, door_x_n, '+');
@@ -142,9 +142,10 @@ static void render_room(WINDOW *win, const GameState *state, int py, int px,
 
   if (state->players != NULL) {
     const int slots[4][2] = {
-        {ROOM_H / 2, ROOM_W / 2}, {ROOM_H / 2, ROOM_W / 2 - 2},
-        {ROOM_H / 2, ROOM_W / 2 + 2}, {ROOM_H / 2 + 2, ROOM_W / 2}};
-    bool occupied[9][21] = {0};
+        {rh / 2, rw / 2}, {rh / 2, rw / 2 - 2},
+        {rh / 2, rw / 2 + 2}, {rh / 2 + 2, rw / 2}};
+    bool occupied[rh][rw];
+    memset(occupied, 0, sizeof(occupied));
     occupied[py][px] = true;
 
     for (int i = 0; i < MAX_PLAYERS; i++) {
@@ -160,8 +161,8 @@ static void render_room(WINDOW *win, const GameState *state, int py, int px,
       if (state->pos_y != NULL && state->pos_x != NULL) {
         int py_other = state->pos_y[i];
         int px_other = state->pos_x[i];
-        if (py_other >= 1 && py_other < ROOM_H - 1 && px_other >= 1 &&
-            px_other < ROOM_W - 1 && !occupied[py_other][px_other]) {
+        if (py_other >= 1 && py_other < rh - 1 && px_other >= 1 &&
+            px_other < rw - 1 && !occupied[py_other][px_other]) {
           oy = py_other;
           ox = px_other;
           occupied[oy][ox] = true;
@@ -170,7 +171,7 @@ static void render_room(WINDOW *win, const GameState *state, int py, int px,
       }
 
       if (!placed) {
-        if (oy >= 1 && oy < ROOM_H - 1 && ox >= 1 && ox < ROOM_W - 1 &&
+        if (oy >= 1 && oy < rh - 1 && ox >= 1 && ox < rw - 1 &&
             !occupied[oy][ox]) {
           occupied[oy][ox] = true;
           placed = true;
@@ -178,8 +179,8 @@ static void render_room(WINDOW *win, const GameState *state, int py, int px,
       }
 
       if (!placed) {
-        for (int y = 1; y < ROOM_H - 1 && !placed; y++) {
-          for (int x = 1; x < ROOM_W - 1; x++) {
+        for (int y = 1; y < rh - 1 && !placed; y++) {
+          for (int x = 1; x < rw - 1; x++) {
             if (!occupied[y][x]) {
               oy = y;
               ox = x;
@@ -196,7 +197,7 @@ static void render_room(WINDOW *win, const GameState *state, int py, int px,
     }
   }
 
-  int list_y = top + ROOM_H + 1;
+  int list_y = top + rh + 1;
   mvwprintw(win, list_y, 2, "Porte: N=%d E=%d S=%d W=%d",
             door_target_for_dir(state, 0), door_target_for_dir(state, 1),
             door_target_for_dir(state, 2), door_target_for_dir(state, 3));
@@ -205,7 +206,7 @@ static void render_room(WINDOW *win, const GameState *state, int py, int px,
 }
 
 static void render_minimap(WINDOW *win, const GameState *state, int top, int left) {
-  int mx = left + ROOM_W + 3;
+  int mx = left + state->room_w + 3;
   int my = top;
 
   wattron(win, A_BOLD);
@@ -395,8 +396,8 @@ int game_screen(GameState *state) {
   wclear(win);
   wrefresh(win);
 
-  int py = ROOM_H / 2;
-  int px = ROOM_W / 2;
+  int py = state->room_h / 2;
+  int px = state->room_w / 2;
 
   int prev_lives = state->team_lives;
   char status[128] = {0};
@@ -413,10 +414,10 @@ int game_screen(GameState *state) {
 
     int new_y = py + dy;
     int new_x = px + dx;
-    int at_wall = (new_y <= 0 || new_y >= ROOM_H - 1 || new_x <= 0 ||
-                   new_x >= ROOM_W - 1);
+    int at_wall = (new_y <= 0 || new_y >= state->room_h - 1 || new_x <= 0 ||
+                   new_x >= state->room_w - 1);
     if (at_wall) {
-      int dir = wall_dir(new_y, new_x);
+      int dir = wall_dir(state, new_y, new_x);
       int target = (dir < 0) ? -1 : door_target_for_dir(state, dir);
       if (target == -1) {
         char *poll = sendnrecv(GET_GAME_STATE);
@@ -443,8 +444,8 @@ int game_screen(GameState *state) {
         render_game(win, state, py, px, status);
         continue;
       }
-      py = ROOM_H / 2;
-      px = ROOM_W / 2;
+      py = state->room_h / 2;
+      px = state->room_w / 2;
       if (update_state_from_reply(state, reply, status, sizeof(status), &py,
                                   &px) < 0) {
         render_game(win, state, py, px, status);

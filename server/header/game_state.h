@@ -8,9 +8,9 @@
 #define FRAME_SIZE 4096
 
 extern Dungeon *game_dungeon;
-#define MAP_SIZE   10
-#define ROOM_H      9
-#define ROOM_W     21
+#define MAP_SIZE   10 // how many rooms
+#define ROOM_H      32
+#define ROOM_W     24
 #define MAX_PLAYERS 4
 
 typedef struct {
