@@ -202,7 +202,7 @@ bool player_collect_item(int player_id, int x, int y) {
     ItemType t = item->type;
     bool team_won = item_collect(game_dungeon, player_id, room_id, x, y);
 
-    if (t == ITEM_TRAP) {
+    if (t == ITEM_TRAP || t == ITEM_BOOBYTRAP) {
         if (player_id >= 0 && player_id < MAX_PLAYERS)
             connections[player_id].traps_triggered++;
         player_lose_life();

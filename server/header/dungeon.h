@@ -15,7 +15,8 @@ typedef enum {
     ITEM_NONE,
     ITEM_NORMAL,
     ITEM_QUEST,
-    ITEM_TRAP
+    ITEM_TRAP,
+    ITEM_BOOBYTRAP
 } ItemType;
 
 typedef struct {
@@ -29,6 +30,7 @@ typedef struct {
     int x, y;
     MonsterState state;
     int target_player_id;  // id del giocatore inseguito (-1 se nessuno)
+    int failed_moves;      // tentativi di movimento falliti (0-2 per la probabilità)
     char symbol;
 } Monster;
 

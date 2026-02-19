@@ -131,7 +131,17 @@ static void handle_update_player_position(const ClientRequest *req, Conn *conn,
             int rid = game_state.positions[conn->player_id];
             Room *r = dungeon_get_room(game_dungeon, rid);
 
+            /* Verifica il tipo di item prima di raccoglierlo */
+            Item *item_check = room_get_item(r, req->pos_x, req->pos_y);
+            ItemType item_type = (item_check != NULL) ? item_check->type : ITEM_NONE;
+
             bool team_won = player_collect_item(conn->player_id, req->pos_x, req->pos_y);
+
+            /* Se è una booby trap piazzata da un mostro, mostra messaggio personalizzato */
+            if (item_type == ITEM_BOOBYTRAP) {
+                printf("[PLAYER %d] A monster had placed a trap and you picked it up at room %d!\n", 
+                       conn->player_id, rid);
+            }
 
             Monster *mon = room_get_monster(r, req->pos_x, req->pos_y);
             if (mon) {
@@ -141,10 +151,10 @@ static void handle_update_player_position(const ClientRequest *req, Conn *conn,
             }
 
             /* Muovi i mostri che inseguono questo giocatore */
-            int monster_hits = room_move_monsters_toward_player(
+            int monster_kills = room_move_monsters_toward_player(
                 r, conn->player_id, req->pos_y, req->pos_x);
-            for (int h = 0; h < monster_hits; h++) {
-                player_lose_life();
+            for (int h = 0; h < monster_kills; h++) {
+                player_kill_monster(conn->player_id);
             }
 
             if (team_won) {
