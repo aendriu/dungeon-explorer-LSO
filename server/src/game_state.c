@@ -11,7 +11,7 @@
 Dungeon *game_dungeon = NULL;
 
 Team team = {
-    .shared_lives = 3,
+    .shared_lives = INITIAL_LIVES,
     .monsters_killed = 0,
     .lives_mutex  = PTHREAD_MUTEX_INITIALIZER
 };
@@ -64,10 +64,10 @@ static void generate_random_map(int map[MAP_SIZE][MAP_SIZE]) {
 
 void init_teams(void) {
     pthread_mutex_lock(&team.lives_mutex);
-    team.shared_lives = 3;
+    team.shared_lives = INITIAL_LIVES;
     team.monsters_killed = 0;
     pthread_mutex_unlock(&team.lives_mutex);
-    printf("- team initialized with 3 shared lives\n");
+    printf("- team initialized with %d shared lives\n", INITIAL_LIVES);
 }
 
 unsigned int *get_rand_seed(void) {
@@ -108,7 +108,7 @@ void init_game_state_if_needed(void) {
             dungeon_destroy(game_dungeon);
             game_dungeon = NULL;
         }
-        game_dungeon = dungeon_create(MAP_SIZE, ROOM_W, ROOM_H);
+        game_dungeon = dungeon_create(MAP_SIZE);
         quest_items_collected = 0;
 
         init_teams();
@@ -158,12 +158,13 @@ static int item_to_val(const Item *it) {
 }
 
 static void json_add_room(cJSON *root, int room_id) {
-    cJSON_AddNumberToObject(root, "room_h", ROOM_H);
-    cJSON_AddNumberToObject(root, "room_w", ROOM_W);
     if (game_dungeon == NULL) return;
 
     Room *room = dungeon_get_room(game_dungeon, room_id);
     if (room == NULL) return;
+
+    cJSON_AddNumberToObject(root, "room_h", room->height);
+    cJSON_AddNumberToObject(root, "room_w", room->width);
 
     cJSON *items = cJSON_AddArrayToObject(root, "room_items");
     if (items != NULL) {

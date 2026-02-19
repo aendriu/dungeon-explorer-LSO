@@ -95,23 +95,28 @@ static void assign_room_monsters(Room *r, int room_id) {
         room_assign_monsters_to_players(r, pids, np);
 }
 
+static bool valid_pid(int pid) {
+    return pid >= 0 && pid < MAX_PLAYERS;
+}
+
 static void handle_get_connected_players(char *response, size_t res_len) {
     snprintf(response, res_len, "%d", get_connected_players());
 }
 
 static void handle_start_game(Conn *conn, char *response, size_t res_len) {
     init_game_state_if_needed();
+    int pid = conn->player_id;
     pthread_mutex_lock(&game_state.mutex);
-    if (conn->player_id >= 0 && conn->player_id < MAX_PLAYERS &&
-        game_state.positions[conn->player_id] < 0) {
-        game_state.positions[conn->player_id] = 0;
-        game_state.pos_y[conn->player_id]     = ROOM_H / 2;
-        game_state.pos_x[conn->player_id]     = ROOM_W / 2;
+    if (valid_pid(pid) && game_state.positions[pid] < 0) {
+        game_state.positions[pid] = 0;
+        Room *spawn_room = dungeon_get_room(game_dungeon, 0);
+        game_state.pos_y[pid]     = spawn_room ? spawn_room->height / 2 : 0;
+        game_state.pos_x[pid]     = spawn_room ? spawn_room->width  / 2 : 0;
 
         if (game_dungeon != NULL)
             assign_room_monsters(dungeon_get_room(game_dungeon, 0), 0);
     }
-    char *json = build_game_state_json(conn->player_id, NULL);
+    char *json = build_game_state_json(pid, NULL);
     pthread_mutex_unlock(&game_state.mutex);
     copy_json_response(response, res_len, json);
 }
@@ -124,69 +129,96 @@ static void handle_get_game_state(Conn *conn, char *response, size_t res_len) {
     copy_json_response(response, res_len, json);
 }
 
+static const char *process_tile(int pid, Room *r, int x, int y) {
+    const char *err = NULL;
+    bool team_won = false;
+
+    /* Raccolta item */
+    Item *item = room_get_item(r, x, y);
+    if (item) {
+        ItemType t = item->type;
+        item->collected = true;
+        item->symbol   = '.';
+
+        if (t == ITEM_TRAP || t == ITEM_BOOBYTRAP) {
+            players[pid].traps_triggered++;
+            player_lose_life();
+            if (t == ITEM_BOOBYTRAP)
+                err = MSG_BOOBY_TRAP;
+        } else {
+            Player *p = &players[pid];
+            if (p->items_collected < MAX_ITEMS_PER_PLAYER) {
+                p->items[p->items_collected] = *item;
+                p->items_collected++;
+            }
+            if (t == ITEM_QUEST) {
+                p->quest_items_count++;
+                pthread_mutex_lock(&quest_items_mutex);
+                quest_items_collected++;
+                team_won = (quest_items_collected >= QUEST_ITEMS_TO_WIN);
+                pthread_mutex_unlock(&quest_items_mutex);
+            } else if (t == ITEM_NORMAL) {
+                p->normal_items_count++;
+            }
+        }
+    }
+
+    /* Uccisione mostro sulla casella */
+    Monster *mon = room_get_monster(r, x, y);
+    if (mon) {
+        free(mon);
+        r->monsters[y][x] = NULL;
+        player_kill_monster(pid);
+    }
+
+    /* Mostri inseguono il giocatore */
+    int hits = room_move_monsters_toward_player(r, pid, y, x);
+    for (int h = 0; h < hits; h++)
+        player_lose_life();
+
+    /* Condizioni di fine partita */
+    if (team_won) {
+        dungeon_kill_all_monsters(game_dungeon);
+        return MSG_TEAM_WON;
+    }
+    pthread_mutex_lock(&team.lives_mutex);
+    int lives = team.shared_lives;
+    pthread_mutex_unlock(&team.lives_mutex);
+    if (lives <= 0) {
+        dungeon_kill_all_monsters(game_dungeon);
+        return MSG_TEAM_DEFEATED;
+    }
+
+    return err;
+}
+
 static void handle_update_player_position(const ClientRequest *req, Conn *conn,
                                           char *response, size_t res_len) {
     init_game_state_if_needed();
     const char *err = NULL;
     pthread_mutex_lock(&game_state.mutex);
-    if (conn->player_id < 0 || conn->player_id >= MAX_PLAYERS) {
+    if (!valid_pid(conn->player_id)) {
         err = MSG_INVALID_PLAYER;
     } else if (!req || !req->has_pos) {
         err = MSG_MISSING_POS;
-    } else if (req->pos_y <= 0 || req->pos_y >= ROOM_H - 1 ||
-               req->pos_x <= 0 || req->pos_x >= ROOM_W - 1) {
-        err = MSG_INVALID_POS;
     } else {
-        game_state.pos_y[conn->player_id] = req->pos_y;
-        game_state.pos_x[conn->player_id] = req->pos_x;
+        int pid = conn->player_id;
+        int rid = game_state.positions[pid];
+        Room *r = (game_dungeon != NULL) ? dungeon_get_room(game_dungeon, rid) : NULL;
+        int rh = r ? r->height : 0;
+        int rw = r ? r->width  : 0;
 
-        if (game_dungeon != NULL) {
-            int rid = game_state.positions[conn->player_id];
-            Room *r = dungeon_get_room(game_dungeon, rid);
+        if (req->pos_y <= 0 || req->pos_y >= rh - 1 ||
+            req->pos_x <= 0 || req->pos_x >= rw - 1) {
+            err = MSG_INVALID_POS;
+        } else {
+            game_state.pos_y[pid] = req->pos_y;
+            game_state.pos_x[pid] = req->pos_x;
 
-            /* Verifica il tipo di item prima di raccoglierlo */
-            Item *item_check = room_get_item(r, req->pos_x, req->pos_y);
-            ItemType item_type = (item_check != NULL) ? item_check->type : ITEM_NONE;
-
-            bool team_won = player_collect_item(conn->player_id, req->pos_x, req->pos_y);
-
-            /* Se è una booby trap piazzata da un mostro, notifica il client */
-            if (item_type == ITEM_BOOBYTRAP) {
-                printf("[PLAYER %d] A monster had placed a trap and you picked it up at room %d!\n", 
-                       conn->player_id, rid);
-                err = MSG_BOOBY_TRAP;
-            }
-
-            Monster *mon = room_get_monster(r, req->pos_x, req->pos_y);
-            if (mon) {
-                free(mon);
-                r->monsters[req->pos_y][req->pos_x] = NULL;
-                player_kill_monster(conn->player_id);
-            }
-
-            /* Muovi i mostri che inseguono questo giocatore */
-            int monster_hits = room_move_monsters_toward_player(
-                r, conn->player_id, req->pos_y, req->pos_x);
-            for (int h = 0; h < monster_hits; h++) {
-                player_lose_life();
-            }
-
-            /* Controlla condizioni di fine partita */
-            if (team_won) {
-                dungeon_kill_all_monsters(game_dungeon);
-                err = MSG_TEAM_WON;
-            } else {
-                pthread_mutex_lock(&team.lives_mutex);
-                int lives = team.shared_lives;
-                pthread_mutex_unlock(&team.lives_mutex);
-                if (lives <= 0) {
-                    dungeon_kill_all_monsters(game_dungeon);
-                    err = MSG_TEAM_DEFEATED;
-                }
-            }
+            if (r != NULL)
+                err = process_tile(pid, r, req->pos_x, req->pos_y);
         }
     }
-
     char *json = build_game_state_json(conn->player_id, err);
     pthread_mutex_unlock(&game_state.mutex);
     copy_json_response(response, res_len, json);
@@ -196,10 +228,9 @@ static void handle_move_player(const ClientRequest *req, Conn *conn,
                                char *response, size_t res_len) {
     init_game_state_if_needed();
     const char *err = NULL;
+    int pid = conn->player_id;
     pthread_mutex_lock(&game_state.mutex);
-    int current = (conn->player_id >= 0 && conn->player_id < MAX_PLAYERS)
-                      ? game_state.positions[conn->player_id]
-                      : -1;
+    int current = valid_pid(pid) ? game_state.positions[pid] : -1;
     if (!req || !req->has_target) {
         err = "missing_target";
     } else if (current < 0 || current >= game_state.map_size) {
@@ -210,15 +241,16 @@ static void handle_move_player(const ClientRequest *req, Conn *conn,
     } else if (game_state.map[current][req->target_room] == 0) {
         err = "invalid_move";
     } else {
-        game_state.positions[conn->player_id] = req->target_room;
-        game_state.pos_y[conn->player_id]     = ROOM_H / 2;
-        game_state.pos_x[conn->player_id]     = ROOM_W / 2;
+        game_state.positions[pid] = req->target_room;
+        Room *tr = (game_dungeon != NULL)
+                       ? dungeon_get_room(game_dungeon, req->target_room) : NULL;
+        game_state.pos_y[pid] = tr ? tr->height / 2 : 0;
+        game_state.pos_x[pid] = tr ? tr->width  / 2 : 0;
 
-        if (game_dungeon != NULL)
-            assign_room_monsters(dungeon_get_room(game_dungeon, req->target_room),req->target_room);
+        if (tr != NULL)
+            assign_room_monsters(tr, req->target_room);
     }
-
-    char *json = build_game_state_json(conn->player_id, err);
+    char *json = build_game_state_json(pid, err);
     pthread_mutex_unlock(&game_state.mutex);
     copy_json_response(response, res_len, json);
 }

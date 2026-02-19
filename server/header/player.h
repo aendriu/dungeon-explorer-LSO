@@ -22,7 +22,6 @@ extern pthread_mutex_t plid_mutex;
 int get_connected_players(void);
 void init_newplayer(int, Conn *);
 int player_lose_life(void);
-bool player_collect_item(int player_id, int x, int y);
 void player_kill_monster(int player_id);
 
 #endif

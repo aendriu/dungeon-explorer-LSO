@@ -56,10 +56,9 @@ extern pthread_mutex_t quest_items_mutex;
 
 Item* room_get_item(Room *r, int x, int y);
 Monster* room_get_monster(Room *r, int x, int y);
-Dungeon* dungeon_create(int num_rooms, int room_width, int room_height);
+Dungeon* dungeon_create(int num_rooms);
 void dungeon_destroy(Dungeon *d);
 Room* dungeon_get_room(Dungeon *d, int room_id);
-bool item_collect(Dungeon *d, int player_id, int room_id, int x, int y);
 
 #endif
 

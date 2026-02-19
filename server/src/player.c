@@ -53,8 +53,9 @@ void init_newplayer(int sockfd, Conn *connections) {
   pthread_mutex_lock(&game_state.mutex);
   if (game_state.started) {
     game_state.positions[idx] = 0;
-    game_state.pos_y[idx] = ROOM_H / 2;
-    game_state.pos_x[idx] = ROOM_W / 2;
+    Room *spawn = dungeon_get_room(game_dungeon, 0);
+    game_state.pos_y[idx] = spawn ? spawn->height / 2 : 0;
+    game_state.pos_x[idx] = spawn ? spawn->width  / 2 : 0;
   }
   pthread_mutex_unlock(&game_state.mutex);
 
@@ -95,40 +96,6 @@ void player_kill_monster(int player_id) {
   pthread_mutex_lock(&team.lives_mutex);
   team.monsters_killed++;
   pthread_mutex_unlock(&team.lives_mutex);
-}
-
-bool player_collect_item(int player_id, int x, int y) {
-    if (!game_dungeon) return false;
-
-    int room_id = (player_id >= 0 && player_id < MAX_PLAYERS)
-                      ? game_state.positions[player_id] : -1;
-    if (room_id < 0) return false;
-
-    Room *r = dungeon_get_room(game_dungeon, room_id);
-    Item *item = room_get_item(r, x, y);
-    if (!item) return false;
-
-    ItemType t = item->type;
-    bool team_won = item_collect(game_dungeon, player_id, room_id, x, y);
-
-    if (t == ITEM_TRAP || t == ITEM_BOOBYTRAP) {
-        if (player_id >= 0 && player_id < MAX_PLAYERS)
-            players[player_id].traps_triggered++;
-        player_lose_life();
-        return false;
-    }
-
-    if (player_id >= 0 && player_id < MAX_PLAYERS) {
-        Player *p = &players[player_id];
-        if (p->items_collected < MAX_ITEMS_PER_PLAYER) {
-            p->items[p->items_collected] = *item;
-            p->items_collected++;
-            if (t == ITEM_QUEST)  p->quest_items_count++;
-            if (t == ITEM_NORMAL) p->normal_items_count++;
-        }
-    }
-
-    return team_won;
 }
 
 

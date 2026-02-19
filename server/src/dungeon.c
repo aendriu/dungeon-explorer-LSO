@@ -193,7 +193,7 @@ Item* room_get_item(Room *r, int x, int y) {
     return item;
 }
 
-Dungeon* dungeon_create(int num_rooms, int room_width, int room_height) {
+Dungeon* dungeon_create(int num_rooms) {
     Dungeon *d = malloc(sizeof(Dungeon));
     if (!d) return NULL;
 
@@ -204,8 +204,12 @@ Dungeon* dungeon_create(int num_rooms, int room_width, int room_height) {
         return NULL;
     }
 
+    unsigned int *seed = get_rand_seed();
+
     for (int i = 0; i < num_rooms; i++) {
-        d->rooms[i] = room_create(i, room_width, room_height);
+        int rh = ROOM_H_MIN + rand_r(seed) % (ROOM_H_MAX - ROOM_H_MIN + 1);
+        int rw = ROOM_W_MIN + rand_r(seed) % (ROOM_W_MAX - ROOM_W_MIN + 1);
+        d->rooms[i] = room_create(i, rw, rh);
         if (!d->rooms[i]) {
             for (int j = 0; j < i; j++) {
                 room_destroy(d->rooms[j]);
@@ -215,9 +219,10 @@ Dungeon* dungeon_create(int num_rooms, int room_width, int room_height) {
             return NULL;
         }
         room_populate(d->rooms[i]);
+        printf("- Room %d: %dx%d\n", i, rw, rh);
     }
 
-    printf("- Dungeon created: %d rooms of %dx%d\n", num_rooms, room_width, room_height);
+    printf("- Dungeon created: %d rooms\n", num_rooms);
     return d;
 }
 
@@ -239,39 +244,4 @@ Room* dungeon_get_room(Dungeon *d, int room_id) {
     return d->rooms[room_id];
 }
 
-bool item_collect(Dungeon *d, int player_id, int room_id, int x, int y) {
-    Room *r = dungeon_get_room(d, room_id);
-    if (!r) {
-        return false;
-    }
 
-    Item *item = room_get_item(r, x, y);
-    if (!item) {
-        return false;
-    }
-
-    item->collected = true;
-    item->symbol = '.';
-
-    if (item->type == ITEM_NORMAL) {
-        printf("[PLAYER %d] Collected normal item at room %d (%d, %d)\n", player_id, room_id, x, y);
-        return false;
-    } else if (item->type == ITEM_QUEST) {
-        pthread_mutex_lock(&quest_items_mutex);
-        quest_items_collected++;
-        int total = quest_items_collected;
-        pthread_mutex_unlock(&quest_items_mutex);
-
-        printf("[PLAYER %d] Collected QUEST item at room %d (%d, %d)! Total: %d/3\n", player_id, room_id, x, y, total);
-
-        if (total >= 3) {
-            printf("[GAME] TEAM WON! All quest items collected!\n");
-            return true;
-        }
-    } else if (item->type == ITEM_TRAP) {
-        printf("[PLAYER %d] Triggered a TRAP at room %d (%d, %d)!\n", player_id, room_id, x, y);
-        return false;
-    }
-
-    return false;
-}

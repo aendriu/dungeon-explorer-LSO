@@ -9,9 +9,12 @@
 
 extern Dungeon *game_dungeon;
 #define MAP_SIZE   10 // how many rooms
-#define ROOM_H      32
-#define ROOM_W     24
+#define ROOM_H_MIN  16
+#define ROOM_H_MAX  28
+#define ROOM_W_MIN  24
+#define ROOM_W_MAX  40
 #define MAX_PLAYERS 4
+#define INITIAL_LIVES 12
 
 typedef struct {
     int  map_size;

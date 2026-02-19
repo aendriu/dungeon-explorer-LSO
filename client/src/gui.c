@@ -136,14 +136,26 @@ static void render_room(WINDOW *win, const GameState *state, int py, int px,
   int door_y_e = top + rh / 2;
   int door_x_e = left + rw - 1;
 
-  if (door_target_for_dir(state, 0) != -1)
-    mvwaddch(win, door_y_n, door_x_n, '+');
-  if (door_target_for_dir(state, 1) != -1)
-    mvwaddch(win, door_y_e, door_x_e, '+');
-  if (door_target_for_dir(state, 2) != -1)
-    mvwaddch(win, door_y_s, door_x_s, '+');
-  if (door_target_for_dir(state, 3) != -1)
+  if (door_target_for_dir(state, 0) != -1) {
+    mvwaddch(win, door_y_n, door_x_n - 1, ' ');
+    mvwaddch(win, door_y_n, door_x_n,     '+');
+    mvwaddch(win, door_y_n, door_x_n + 1, ' ');
+  }
+  if (door_target_for_dir(state, 1) != -1) {
+    mvwaddch(win, door_y_e - 1, door_x_e, ' ');
+    mvwaddch(win, door_y_e,     door_x_e, '+');
+    mvwaddch(win, door_y_e + 1, door_x_e, ' ');
+  }
+  if (door_target_for_dir(state, 2) != -1) {
+    mvwaddch(win, door_y_s, door_x_s - 1, ' ');
+    mvwaddch(win, door_y_s, door_x_s,     '+');
+    mvwaddch(win, door_y_s, door_x_s + 1, ' ');
+  }
+  if (door_target_for_dir(state, 3) != -1) {
     mvwaddch(win, door_y_w, door_x_w, '+');
+    mvwaddch(win, door_y_w - 1, door_x_w, ' ');
+    mvwaddch(win, door_y_w + 1, door_x_w, ' ');
+  }
 
   char self_sym = (state->player_id >= 0 && state->player_id < MAX_PLAYERS)
                       ? (char)('1' + state->player_id)
