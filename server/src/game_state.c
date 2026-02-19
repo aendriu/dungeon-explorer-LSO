@@ -109,13 +109,7 @@ void init_game_state_if_needed(void) {
             game_dungeon = NULL;
         }
         game_dungeon = dungeon_create(MAP_SIZE, ROOM_W, ROOM_H);
-        if (game_dungeon) {
-            quest_items_collected = 0;
-            for (int i = 0; i < MAP_SIZE; i++) {
-                room_generate_items(game_dungeon->rooms[i]);
-                room_generate_monsters(game_dungeon->rooms[i]);
-            }
-        }
+        quest_items_collected = 0;
 
         init_teams();
         game_state.started = true;

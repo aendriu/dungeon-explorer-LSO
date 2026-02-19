@@ -88,82 +88,83 @@ void room_destroy(Room *r) {
     free(r);
 }
 
-void room_generate_items(Room *r) {
+static ItemType roll_item_type(unsigned int *seed) {
+    if (rand_r(seed) % 100 == 0) return ITEM_QUEST;
+    if (rand_r(seed) % 50  == 0) return ITEM_TRAP;
+    if (rand_r(seed) % 25  == 0) return ITEM_NORMAL;
+    return ITEM_NONE;
+}
+
+static void place_item(Item *item, ItemType type) {
+    switch (type) {
+    case ITEM_QUEST:
+        item->type     = ITEM_QUEST;
+        item->collected = false;
+        item->symbol   = ITEM_SYMBOL;
+        break;
+    case ITEM_TRAP:
+        item->type     = ITEM_TRAP;
+        item->collected = false;
+        item->symbol   = TRAP_SYMBOL;
+        break;
+    case ITEM_NORMAL:
+        item->type     = ITEM_NORMAL;
+        item->collected = false;
+        item->symbol   = ITEM_SYMBOL;
+        break;
+    default:
+        item->type     = ITEM_NONE;
+        item->collected = true;
+        item->symbol   = ' ';
+        break;
+    }
+}
+
+static void room_generate_items(Room *r) {
     if (!r) return;
     unsigned int *seed = get_rand_seed();
 
-    for (int y = 0; y < r->height; y++) {
-        for (int x = 0; x < r->width; x++) {
-            int quest_rand = rand_r(seed) % 100;
-            
-            if (quest_rand == 0) {
-                r->items[y][x].type = ITEM_QUEST;
-                r->items[y][x].collected = false;
-                r->items[y][x].symbol = ITEM_SYMBOL;
-            } else {
-                int trap_rand = rand_r(seed) % 50;
-                if (trap_rand == 0) {
-                    r->items[y][x].type = ITEM_TRAP;
-                    r->items[y][x].collected = false;
-                    r->items[y][x].symbol = TRAP_SYMBOL;
-                } else {
-                    int normal_rand = rand_r(seed) % 25;
-                    if (normal_rand == 0) {
-                        r->items[y][x].type = ITEM_NORMAL;
-                        r->items[y][x].collected = false;
-                        r->items[y][x].symbol = ITEM_SYMBOL;
-                    } else {
-                        r->items[y][x].type = ITEM_NONE;
-                        r->items[y][x].collected = true;
-                        r->items[y][x].symbol = ' ';
-                    }
-                }
-            }
-        }
-    }
+    for (int y = 0; y < r->height; y++)
+        for (int x = 0; x < r->width; x++)
+            place_item(&r->items[y][x], roll_item_type(seed));
 
     printf("- Room %d items generated (%dx%d)\n", r->id, r->width, r->height);
 }
 
-void room_generate_monsters(Room *r) {
-    if (!r) return;
-    unsigned int *seed = get_rand_seed();
+static void place_monster(Monster **cell, int x, int y, unsigned int *seed) {
+    if (*cell != NULL) {
+        free(*cell);
+        *cell = NULL;
+    }
+    if (rand_r(seed) % 50 != 0) return;
 
+    Monster *m = malloc(sizeof(Monster));
+    if (!m) return;
+    *m = (Monster){ .x = x, .y = y, .state = MONSTER_ALIVE,
+                    .target_player_id = -1, .failed_moves = 0,
+                    .symbol = MONSTER_SYMBOL };
+    *cell = m;
+}
+
+static void room_generate_monsters(Room *r) {
+    unsigned int *seed = get_rand_seed();
     int spawn_x = r->width / 2;
     int spawn_y = r->height / 2;
 
-    for (int y = 0; y < r->height; y++) {
+    for (int y = 0; y < r->height; y++)
         for (int x = 0; x < r->width; x++) {
-            if (x == spawn_x && y == spawn_y) {
-                continue;
-            }
-
-            if (r->items[y][x].type != ITEM_NONE && !r->items[y][x].collected) {
-                continue;
-            }
-
-            int monster_rand = rand_r(seed) % 50;
-            if (r->monsters[y][x] != NULL) {
-                free(r->monsters[y][x]);
-                r->monsters[y][x] = NULL;
-            }
-            if (monster_rand == 0) {
-                Monster *m = malloc(sizeof(Monster));
-                if (!m) {
-                    continue;
-                }
-                m->x = x;
-                m->y = y;
-                m->state = MONSTER_ALIVE;
-                m->target_player_id = -1;
-                m->failed_moves = 0;
-                m->symbol = MONSTER_SYMBOL;
-                r->monsters[y][x] = m;
-            }
+            if (x == spawn_x && y == spawn_y) continue;
+            if (r->items[y][x].type != ITEM_NONE && !r->items[y][x].collected) continue;
+            place_monster(&r->monsters[y][x], x, y, seed);
         }
-    }
 
     printf("- Room %d monsters generated (%dx%d)\n", r->id, r->width, r->height);
+}
+
+static void room_populate(Room *r) {
+    if (!r) return;
+    room_generate_items(r);
+    room_generate_monsters(r);
 }
 
 Monster* room_get_monster(Room *r, int x, int y) {
@@ -213,6 +214,7 @@ Dungeon* dungeon_create(int num_rooms, int room_width, int room_height) {
             free(d);
             return NULL;
         }
+        room_populate(d->rooms[i]);
     }
 
     printf("- Dungeon created: %d rooms of %dx%d\n", num_rooms, room_width, room_height);
@@ -226,7 +228,7 @@ void dungeon_destroy(Dungeon *d) {
         room_destroy(d->rooms[i]);
     }
     free(d->rooms);
-    free(d);
+    free(d);  
 }
 
 Room* dungeon_get_room(Dungeon *d, int room_id) {
@@ -235,41 +237,6 @@ Room* dungeon_get_room(Dungeon *d, int room_id) {
     }
 
     return d->rooms[room_id];
-}
-
-char room_get_display_char(Room *r, int x, int y) {
-    if (!r || x < 0 || x >= r->width || y < 0 || y >= r->height) {
-        return '?';
-    }
-
-    if (x == r->entrance_x && y == r->entrance_y) {
-        return DOOR_ENTRANCE;
-    }
-    if (x == r->exit_x && y == r->exit_y) {
-        return DOOR_EXIT;
-    }
-
-    Item *item = &r->items[y][x];
-    if (item->type == ITEM_NONE || item->collected) {
-        return '.';
-    }
-
-    return ITEM_SYMBOL;
-}
-
-void room_print_map(Room *r) {
-    if (!r) return;
-
-    printf("\n=== ROOM %d MAP (%dx%d) ===\n", r->id, r->width, r->height);
-    
-    for (int y = 0; y < r->height; y++) {
-        printf("|");
-        for (int x = 0; x < r->width; x++) {
-            printf("%c", room_get_display_char(r, x, y));
-        }
-        printf("|\n");
-    }
-    printf("\n");
 }
 
 bool item_collect(Dungeon *d, int player_id, int room_id, int x, int y) {
