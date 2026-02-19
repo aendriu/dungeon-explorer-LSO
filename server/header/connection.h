@@ -16,7 +16,6 @@
 #define BACKLOG 10
 
 extern int welcome_sock;
-extern bool si_initialized;
 extern struct addrinfo *servinfo;
 extern volatile sig_atomic_t server_running;
 extern pthread_mutex_t conn_mutex;
@@ -26,6 +25,8 @@ typedef struct {
     pthread_t tid;
     int player_id;
 } Conn;
+
+int send_all(int sockfd, const char *msg, size_t len);
 
 void init_servinfo();
 void init_welcome_sock();

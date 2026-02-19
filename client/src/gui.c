@@ -66,12 +66,12 @@ static int update_state_from_reply(GameState *state, char *reply, char *status,
 
   if (parse_err[0] != '\0') {
     /* Messaggi informativi dal server (non sono errori fatali) */
-    if (strcmp(parse_err, "booby_trap") == 0) {
+    if (strcmp(parse_err, MSG_BOOBY_TRAP) == 0) {
       snprintf(status, status_len, "Un mostro aveva piazzato una trappola qui!");
       return 0;
     }
-    if (strcmp(parse_err, "team_won") == 0 ||
-        strcmp(parse_err, "team_defeated") == 0) {
+    if (strcmp(parse_err, MSG_TEAM_WON) == 0 ||
+        strcmp(parse_err, MSG_TEAM_DEFEATED) == 0) {
       snprintf(status, status_len, "%s", parse_err);
       return 0;
     }

@@ -2,13 +2,30 @@
 #include "../header/connection.h"
 #include "../header/game_state.h"
 #include <arpa/inet.h>
+#include <errno.h>
 #include <ifaddrs.h>
 #include <netinet/in.h>
+
+int send_all(int sockfd, const char *msg, size_t len) {
+  if (sockfd <= 0 || msg == NULL) return -1;
+
+  size_t sent = 0;
+  while (sent < len) {
+    ssize_t rc = send(sockfd, msg + sent, len - sent, 0);
+    if (rc < 0) {
+      if (errno == EINTR) continue;
+      return -1;
+    }
+    if (rc == 0) return -1;
+    sent += (size_t)rc;
+  }
+  return 0;
+}
 
 static const char *MSG_MAX_PLAYER_REACHED =
     "The maximum player capacity has been reached!";
 int welcome_sock = 0;
-bool si_initialized = false;
+static bool si_initialized = false;
 struct addrinfo *servinfo = NULL;
 
 void init_servinfo() {

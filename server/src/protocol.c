@@ -5,12 +5,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 
-static const char *skip_whitespace(const char *s) {
-    while (*s == ' ' || *s == '\t' || *s == '\r' || *s == '\n')
-        s++;
-    return s;
-}
+/* ========== Parsing della richiesta client ========== */
 
 static void parse_payload(cJSON *payload, ClientRequest *req) {
     cJSON *target = cJSON_GetObjectItemCaseSensitive(payload, "target");
@@ -55,8 +52,6 @@ ClientRequest parse_client_request(const char *msg) {
 
     if (msg == NULL) return req;
 
-    msg = skip_whitespace(msg);
-
     if (*msg == '{')
         parse_json_request(msg, &req);
     else {
@@ -65,9 +60,10 @@ ClientRequest parse_client_request(const char *msg) {
         if (endptr != msg && val >= 0)
             req.cmd = (Message)val;
     }
-
     return req;
 }
+
+/* ========== Utility di risposta ========== */
 
 static int copy_json_response(char *response, size_t res_len, char *json) {
     if (json == NULL) {
@@ -85,6 +81,20 @@ static int copy_json_response(char *response, size_t res_len, char *json) {
     return 0;
 }
 
+/* ========== Handler dei comandi ========== */
+
+static void assign_room_monsters(Room *r, int room_id) {
+    if (!r) return;
+    int pids[MAX_PLAYERS];
+    int np = 0;
+    for (int i = 0; i < MAX_PLAYERS; i++) {
+        if (game_state.positions[i] == room_id)
+            pids[np++] = i;
+    }
+    if (np > 0)
+        room_assign_monsters_to_players(r, pids, np);
+}
+
 static void handle_get_connected_players(char *response, size_t res_len) {
     snprintf(response, res_len, "%d", get_connected_players());
 }
@@ -98,20 +108,8 @@ static void handle_start_game(Conn *conn, char *response, size_t res_len) {
         game_state.pos_y[conn->player_id]     = ROOM_H / 2;
         game_state.pos_x[conn->player_id]     = ROOM_W / 2;
 
-        /* Assegna i mostri della stanza 0 ai giocatori presenti */
-        if (game_dungeon != NULL) {
-            Room *r = dungeon_get_room(game_dungeon, 0);
-            if (r != NULL) {
-                int pids[MAX_PLAYERS];
-                int np = 0;
-                for (int i = 0; i < MAX_PLAYERS; i++) {
-                    if (game_state.positions[i] == 0)
-                        pids[np++] = i;
-                }
-                if (np > 0)
-                    room_assign_monsters_to_players(r, pids, np);
-            }
-        }
+        if (game_dungeon != NULL)
+            assign_room_monsters(dungeon_get_room(game_dungeon, 0), 0);
     }
     char *json = build_game_state_json(conn->player_id, NULL);
     pthread_mutex_unlock(&game_state.mutex);
@@ -132,12 +130,12 @@ static void handle_update_player_position(const ClientRequest *req, Conn *conn,
     const char *err = NULL;
     pthread_mutex_lock(&game_state.mutex);
     if (conn->player_id < 0 || conn->player_id >= MAX_PLAYERS) {
-        err = "invalid_player";
+        err = MSG_INVALID_PLAYER;
     } else if (!req || !req->has_pos) {
-        err = "missing_pos";
+        err = MSG_MISSING_POS;
     } else if (req->pos_y <= 0 || req->pos_y >= ROOM_H - 1 ||
                req->pos_x <= 0 || req->pos_x >= ROOM_W - 1) {
-        err = "invalid_pos";
+        err = MSG_INVALID_POS;
     } else {
         game_state.pos_y[conn->player_id] = req->pos_y;
         game_state.pos_x[conn->player_id] = req->pos_x;
@@ -156,7 +154,7 @@ static void handle_update_player_position(const ClientRequest *req, Conn *conn,
             if (item_type == ITEM_BOOBYTRAP) {
                 printf("[PLAYER %d] A monster had placed a trap and you picked it up at room %d!\n", 
                        conn->player_id, rid);
-                err = "booby_trap";
+                err = MSG_BOOBY_TRAP;
             }
 
             Monster *mon = room_get_monster(r, req->pos_x, req->pos_y);
@@ -173,9 +171,18 @@ static void handle_update_player_position(const ClientRequest *req, Conn *conn,
                 player_lose_life();
             }
 
+            /* Controlla condizioni di fine partita */
             if (team_won) {
                 dungeon_kill_all_monsters(game_dungeon);
-                err = "team_won";
+                err = MSG_TEAM_WON;
+            } else {
+                pthread_mutex_lock(&team.lives_mutex);
+                int lives = team.shared_lives;
+                pthread_mutex_unlock(&team.lives_mutex);
+                if (lives <= 0) {
+                    dungeon_kill_all_monsters(game_dungeon);
+                    err = MSG_TEAM_DEFEATED;
+                }
             }
         }
     }
@@ -207,26 +214,16 @@ static void handle_move_player(const ClientRequest *req, Conn *conn,
         game_state.pos_y[conn->player_id]     = ROOM_H / 2;
         game_state.pos_x[conn->player_id]     = ROOM_W / 2;
 
-        /* Assegna i mostri della nuova stanza ai giocatori presenti */
-        if (game_dungeon != NULL) {
-            Room *r = dungeon_get_room(game_dungeon, req->target_room);
-            if (r != NULL) {
-                int pids[MAX_PLAYERS];
-                int np = 0;
-                for (int i = 0; i < MAX_PLAYERS; i++) {
-                    if (game_state.positions[i] == req->target_room)
-                        pids[np++] = i;
-                }
-                if (np > 0)
-                    room_assign_monsters_to_players(r, pids, np);
-            }
-        }
+        if (game_dungeon != NULL)
+            assign_room_monsters(dungeon_get_room(game_dungeon, req->target_room),req->target_room);
     }
 
     char *json = build_game_state_json(conn->player_id, err);
     pthread_mutex_unlock(&game_state.mutex);
     copy_json_response(response, res_len, json);
 }
+
+/* ========== Dispatcher e loop del player ========== */
 
 void manage_response(Message cmd, const ClientRequest *req, Conn *conn,
                      char *response, size_t res_len) {
@@ -247,4 +244,46 @@ void manage_response(Message cmd, const ClientRequest *req, Conn *conn,
         handle_move_player(req, conn, response, res_len);
         break;
     }
+}
+
+void *handle_player(void *args) {
+  Conn *myconn = (Conn *)args;
+  printf("[SERVER] Handling player %d\n", myconn->player_id);
+  
+  while (server_running) {
+    char msg[FRAME_SIZE];
+    memset(msg, 0, sizeof(msg));
+
+    ssize_t r = recv(myconn->sockfd, msg, sizeof(msg), 0);
+    if (r < 0) {
+      if (errno == EINTR) continue;
+      perror("[server, recv, handle_player]");
+      break;
+    }
+    if (r == 0) break;
+
+    char response[FRAME_SIZE];
+    memset(response, 0, sizeof(response));
+    ClientRequest req = parse_client_request(msg);
+    manage_response(req.cmd, &req, myconn, response, sizeof(response));
+
+    if (send_all(myconn->sockfd, response, sizeof(response)) < 0)
+      break;
+  }
+
+  close(myconn->sockfd);
+  myconn->sockfd = 0;
+
+  pthread_mutex_lock(&game_state.mutex);
+  if (myconn->player_id >= 0 && myconn->player_id < MAX_PLAYERS) {
+    game_state.positions[myconn->player_id] = -1;
+    game_state.pos_y[myconn->player_id] = -1;
+    game_state.pos_x[myconn->player_id] = -1;
+  }
+  pthread_mutex_unlock(&game_state.mutex);
+
+  pthread_mutex_lock(&plid_mutex);
+  if (plid_seq > 0) plid_seq -= 1;
+  pthread_mutex_unlock(&plid_mutex);
+  return NULL;
 }

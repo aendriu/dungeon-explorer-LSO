@@ -21,4 +21,6 @@ ClientRequest parse_client_request(const char *msg);
 void manage_response(Message cmd, const ClientRequest *req,
                      Conn *conn, char *response, size_t res_len);
 
+void *handle_player(void *args);
+
 #endif
