@@ -22,7 +22,7 @@ void room_generate_monsters(Room *r) {
                 continue;
             }
 
-            int monster_rand = rand_r(seed) % 25;
+            int monster_rand = rand_r(seed) % 50;
             if (r->monsters[y][x] != NULL) {
                 free(r->monsters[y][x]);
                 r->monsters[y][x] = NULL;
@@ -130,11 +130,12 @@ int room_move_monsters_toward_player(Room *r, int player_id, int target_y, int t
         if (r->monsters[oy][ox] != m) continue;
 
         /* Calcola la probabilità di movimento basata su failed_moves */
-        int probability_denom = 3 - m->failed_moves;  // 3, 2, o 1
-        int move_roll = (rand_r(seed) % 3) + 1;       // Risultato 1-3
+        /* failed_moves=0 → 1/3, failed_moves=1 → 2/3, failed_moves=2 → 3/3 (garantito) */
+        int move_chance = m->failed_moves + 1;      // 1, 2, o 3
+        int move_roll = (rand_r(seed) % 3) + 1;     // Risultato 1-3
 
         /* Se il movimento fallisce, incrementa failed_moves e salta */
-        if (move_roll > probability_denom) {
+        if (move_roll > move_chance) {
             m->failed_moves++;
             if (m->failed_moves > 2) m->failed_moves = 2;
             continue;

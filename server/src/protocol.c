@@ -152,10 +152,11 @@ static void handle_update_player_position(const ClientRequest *req, Conn *conn,
 
             bool team_won = player_collect_item(conn->player_id, req->pos_x, req->pos_y);
 
-            /* Se è una booby trap piazzata da un mostro, mostra messaggio personalizzato */
+            /* Se è una booby trap piazzata da un mostro, notifica il client */
             if (item_type == ITEM_BOOBYTRAP) {
                 printf("[PLAYER %d] A monster had placed a trap and you picked it up at room %d!\n", 
                        conn->player_id, rid);
+                err = "booby_trap";
             }
 
             Monster *mon = room_get_monster(r, req->pos_x, req->pos_y);
@@ -166,10 +167,10 @@ static void handle_update_player_position(const ClientRequest *req, Conn *conn,
             }
 
             /* Muovi i mostri che inseguono questo giocatore */
-            int monster_kills = room_move_monsters_toward_player(
+            int monster_hits = room_move_monsters_toward_player(
                 r, conn->player_id, req->pos_y, req->pos_x);
-            for (int h = 0; h < monster_kills; h++) {
-                player_kill_monster(conn->player_id);
+            for (int h = 0; h < monster_hits; h++) {
+                player_lose_life();
             }
 
             if (team_won) {

@@ -65,6 +65,16 @@ static int update_state_from_reply(GameState *state, char *reply, char *status,
   sync_self_pos(state, py, px);
 
   if (parse_err[0] != '\0') {
+    /* Messaggi informativi dal server (non sono errori fatali) */
+    if (strcmp(parse_err, "booby_trap") == 0) {
+      snprintf(status, status_len, "Un mostro aveva piazzato una trappola qui!");
+      return 0;
+    }
+    if (strcmp(parse_err, "team_won") == 0 ||
+        strcmp(parse_err, "team_defeated") == 0) {
+      snprintf(status, status_len, "%s", parse_err);
+      return 0;
+    }
     snprintf(status, status_len, "Errore: %s", parse_err);
     return -1;
   }
@@ -111,7 +121,7 @@ static void render_room(WINDOW *win, const GameState *state, int py, int px,
       } else if (state->room_items != NULL &&
                  y < state->room_h && x < state->room_w &&
                  state->room_items[y][x] != 0) {
-        ch = '?'; /* item */
+        ch = (state->room_items[y][x] == 3) ? 'T' : '?'; /* trap or item */
       }
       mvwaddch(win, wy, wx, ch);
     }

@@ -6,7 +6,7 @@
 #include "../../utils/enums.h"
 
 #define ITEM_SYMBOL '?'
-#define TRAP_SYMBOL '?'
+#define TRAP_SYMBOL 'T'
 #define MONSTER_SYMBOL 'M'
 #define DOOR_ENTRANCE 'E'
 #define DOOR_EXIT 'U'

@@ -177,7 +177,12 @@ char *build_game_state_json(int player_id, const char *error) {
                         Item *it = &room->items[y][x];
                         int val = 0;
                         if (!it->collected && it->type != ITEM_NONE) {
-                            val = (it->type == ITEM_QUEST) ? 2 : 1;
+                            if (it->type == ITEM_QUEST)
+                                val = 2;
+                            else if (it->type == ITEM_TRAP || it->type == ITEM_BOOBYTRAP)
+                                val = 3;
+                            else
+                                val = 1;
                         }
                         cJSON_AddItemToArray(row, cJSON_CreateNumber(val));
                     }
