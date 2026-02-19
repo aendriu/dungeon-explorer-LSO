@@ -154,6 +154,7 @@ static int item_to_val(const Item *it) {
     if (it->collected || it->type == ITEM_NONE) return 0;
     if (it->type == ITEM_QUEST) return 2;
     if (it->type == ITEM_TRAP || it->type == ITEM_BOOBYTRAP) return 3;
+    if (it->type == ITEM_APPLE) return 4;
     return 1;
 }
 

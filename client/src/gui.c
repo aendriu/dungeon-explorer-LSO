@@ -70,6 +70,10 @@ static int update_state_from_reply(GameState *state, char *reply, char *status,
       snprintf(status, status_len, "Un mostro aveva piazzato una trappola qui!");
       return 0;
     }
+    if (strcmp(parse_err, MSG_APPLE_HEAL) == 0) {
+      snprintf(status, status_len, "Hai trovato una mela! +1 vita");
+      return 0;
+    }
     if (strcmp(parse_err, MSG_TEAM_WON) == 0 ||
         strcmp(parse_err, MSG_TEAM_DEFEATED) == 0) {
       snprintf(status, status_len, "%s", parse_err);
@@ -121,7 +125,11 @@ static void render_room(WINDOW *win, const GameState *state, int py, int px,
       } else if (state->room_items != NULL &&
                  y < state->room_h && x < state->room_w &&
                  state->room_items[y][x] != 0) {
-        ch = (state->room_items[y][x] == 3) ? 'T' : '?'; /* trap or item */
+        int v = state->room_items[y][x];
+        if (v == 2)      ch = 'Q'; /* quest */
+        else if (v == 3) ch = 'T'; /* trap */
+        else if (v == 4) ch = '@'; /* apple */
+        else             ch = '?'; /* normal */
       }
       mvwaddch(win, wy, wx, ch);
     }

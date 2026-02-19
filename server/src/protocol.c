@@ -138,13 +138,17 @@ static const char *process_tile(int pid, Room *r, int x, int y) {
     if (item) {
         ItemType t = item->type;
         item->collected = true;
-        item->symbol   = '.';
 
         if (t == ITEM_TRAP || t == ITEM_BOOBYTRAP) {
             players[pid].traps_triggered++;
             player_lose_life();
             if (t == ITEM_BOOBYTRAP)
                 err = MSG_BOOBY_TRAP;
+        } else if (t == ITEM_APPLE) {
+            pthread_mutex_lock(&team.lives_mutex);
+            team.shared_lives++;
+            pthread_mutex_unlock(&team.lives_mutex);
+            err = MSG_APPLE_HEAL;
         } else {
             Player *p = &players[pid];
             if (p->items_collected < MAX_ITEMS_PER_PLAYER) {

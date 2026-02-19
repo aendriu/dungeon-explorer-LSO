@@ -5,33 +5,26 @@
 #include <pthread.h>
 #include "../../utils/enums.h"
 
-#define ITEM_SYMBOL '?'
-#define TRAP_SYMBOL 'T'
-#define MONSTER_SYMBOL 'M'
-#define DOOR_ENTRANCE 'E'
-#define DOOR_EXIT 'U'
-
 typedef enum {
     ITEM_NONE,
     ITEM_NORMAL,
     ITEM_QUEST,
     ITEM_TRAP,
-    ITEM_BOOBYTRAP
+    ITEM_BOOBYTRAP,
+    ITEM_APPLE
 } ItemType;
 
 typedef struct {
     int x, y;
     ItemType type;
     bool collected;
-    char symbol;
 } Item;
 
 typedef struct {
     int x, y;
     MonsterState state;
-    int target_player_id;  // id del giocatore inseguito (-1 se nessuno)
-    int failed_moves;      // tentativi di movimento falliti (0-2 per la probabilità)
-    char symbol;
+    int target_player_id;
+    int failed_moves;
 } Monster;
 
 // Room è una stanza del dungeon
@@ -39,10 +32,8 @@ typedef struct {
     int id;
     int width;
     int height;
-    Item **items;      // matrice 2D di items nella stanza
-    Monster ***monsters; // matrice 2D di puntatori ai mostri nella stanza
-    int entrance_x, entrance_y;  // Coordinata porta di entrata
-    int exit_x, exit_y;           // Coordinata porta di uscita
+    Item **items;
+    Monster ***monsters;
 } Room;
 
 // Dungeon contiene più stanze

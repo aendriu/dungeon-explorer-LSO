@@ -22,7 +22,7 @@ static Item **alloc_item_grid(int width, int height) {
         }
         for (int x = 0; x < width; x++) {
             grid[y][x] = (Item){ .x = x, .y = y, .type = ITEM_NONE,
-                                 .collected = true, .symbol = ' ' };
+                                 .collected = true };
         }
     }
     return grid;
@@ -67,10 +67,6 @@ Room* room_create(int id, int width, int height) {
     r->id = id;
     r->width = width;
     r->height = height;
-    r->entrance_x = 0;
-    r->entrance_y = 0;
-    r->exit_x = width - 1;
-    r->exit_y = height - 1;
 
     r->items = alloc_item_grid(width, height);
     if (!r->items) { free(r); return NULL; }
@@ -90,6 +86,7 @@ void room_destroy(Room *r) {
 
 static ItemType roll_item_type(unsigned int *seed) {
     if (rand_r(seed) % 100 == 0) return ITEM_QUEST;
+    if (rand_r(seed) % 75  == 0) return ITEM_APPLE;
     if (rand_r(seed) % 50  == 0) return ITEM_TRAP;
     if (rand_r(seed) % 25  == 0) return ITEM_NORMAL;
     return ITEM_NONE;
@@ -98,24 +95,15 @@ static ItemType roll_item_type(unsigned int *seed) {
 static void place_item(Item *item, ItemType type) {
     switch (type) {
     case ITEM_QUEST:
-        item->type     = ITEM_QUEST;
-        item->collected = false;
-        item->symbol   = ITEM_SYMBOL;
-        break;
+    case ITEM_APPLE:
     case ITEM_TRAP:
-        item->type     = ITEM_TRAP;
-        item->collected = false;
-        item->symbol   = TRAP_SYMBOL;
-        break;
     case ITEM_NORMAL:
-        item->type     = ITEM_NORMAL;
-        item->collected = false;
-        item->symbol   = ITEM_SYMBOL;
+        item->type      = type;
+        item->collected  = false;
         break;
     default:
-        item->type     = ITEM_NONE;
-        item->collected = true;
-        item->symbol   = ' ';
+        item->type      = ITEM_NONE;
+        item->collected  = true;
         break;
     }
 }
@@ -141,8 +129,7 @@ static void place_monster(Monster **cell, int x, int y, unsigned int *seed) {
     Monster *m = malloc(sizeof(Monster));
     if (!m) return;
     *m = (Monster){ .x = x, .y = y, .state = MONSTER_ALIVE,
-                    .target_player_id = -1, .failed_moves = 0,
-                    .symbol = MONSTER_SYMBOL };
+                    .target_player_id = -1, .failed_moves = 0 };
     *cell = m;
 }
 
