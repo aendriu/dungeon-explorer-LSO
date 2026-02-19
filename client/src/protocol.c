@@ -4,6 +4,34 @@
 
 enum { CLIENT_FRAME_SIZE = 4096 };
 
+static int send_all(int fd, const char *buf, size_t len) {
+  size_t sent = 0;
+  while (sent < len) {
+    ssize_t rc = send(fd, buf + sent, len - sent, 0);
+    if (rc < 0) {
+      if (errno == EINTR) continue;
+      return -1;
+    }
+    if (rc == 0) return -1;
+    sent += (size_t)rc;
+  }
+  return 0;
+}
+
+static int recv_all(int fd, char *buf, size_t len) {
+  size_t received = 0;
+  while (received < len) {
+    ssize_t rc = recv(fd, buf + received, len - received, 0);
+    if (rc < 0) {
+      if (errno == EINTR) continue;
+      return -1;
+    }
+    if (rc == 0) return -1;
+    received += (size_t)rc;
+  }
+  return 0;
+}
+
 static char *sendnrecv_frame(const char *frame) {
   if (sock < 0) {
     fprintf(stderr, "[CLIENT] sendnrecv: socket not connected\n");
@@ -14,7 +42,7 @@ static char *sendnrecv_frame(const char *frame) {
   memset(buffer, 0, sizeof(buffer));
   strncpy(buffer, frame, sizeof(buffer) - 1);
 
-  if (send(sock, buffer, sizeof(buffer), 0) < 0) {
+  if (send_all(sock, buffer, sizeof(buffer)) < 0) {
     perror("[CLIENT] sendnrecv: send");
     return NULL;
   }
@@ -24,13 +52,11 @@ static char *sendnrecv_frame(const char *frame) {
     return NULL;
   }
 
-  ssize_t r = recv(sock, reply, CLIENT_FRAME_SIZE, 0);
-  if (r <= 0) {
+  if (recv_all(sock, reply, CLIENT_FRAME_SIZE) < 0) {
     free(reply);
     return NULL;
   }
 
-  reply[r] = '\0';
   return reply;
 }
 
