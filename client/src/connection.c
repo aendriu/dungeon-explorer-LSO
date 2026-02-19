@@ -27,7 +27,6 @@ static void init_servinfo(const char *host, const char *port) {
         fprintf(stderr, "[CLIENT] init_servinfo: servinfo is NULL\n");
 		exit(1);
     }
-    printf("- servinfo initialized\n");
 }
 
 void socket_create() {

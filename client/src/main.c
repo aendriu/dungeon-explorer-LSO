@@ -52,7 +52,7 @@ static int manage_choice(UserChoice *state) {
     if (connect_to_server(host, port) == 0) {
       *state = TO_LOBBY;
     } else {
-      printf("Failed to connect to %s:%s\n", host, port);
+      fprintf(stderr, "Failed to connect to %s:%s\n", host, port);
       getchar();
     }
     return 0;
