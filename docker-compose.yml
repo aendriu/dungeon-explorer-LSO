@@ -1,0 +1,25 @@
+# Docker Compose per Dungeon Explorer
+# Uso:
+#   docker compose up              -> avvia il server
+#   docker compose run client      -> avvia un client interattivo (scrivere "server" come IP)
+
+services:
+
+  # Il server di gioco, ascolta sulla porta 9090
+  server:
+    build: .
+    command: ./server.out
+    ports:
+      - "9090:9090"
+    restart: unless-stopped
+
+  # Il client ncurses (va lanciato con "docker compose run client")
+  client:
+    build: .
+    command: ./client.out
+    depends_on:
+      - server
+    stdin_open: true       # equivalente di -i (input interattivo)
+    tty: true              # equivalente di -t (terminale per ncurses)
+    environment:
+      - TERM=xterm-256color
