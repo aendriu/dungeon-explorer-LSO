@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* Libera una matrice 2D di interi (ogni riga, poi l'array di righe) */
+/* Libera una griglia 2D di interi */
 static void free_int_grid(int **grid, int rows) {
   if (grid == NULL) return;
   for (int i = 0; i < rows; i++)
@@ -11,7 +11,6 @@ static void free_int_grid(int **grid, int rows) {
   free(grid);
 }
 
-/* Libera tutta la memoria allocata dinamicamente della struttura GameState */
 void free_game_state(GameState *state) {
   if (state == NULL)
     return;
@@ -25,9 +24,9 @@ void free_game_state(GameState *state) {
   state->player_id = -1;
 }
 
-/* ---------- JSON parse helpers per parse_game_state ---------- */
+/* ---------- JSON parse helpers ---------- */
 
-/* Estrae il messaggio di errore dal server (se presente) */
+/* Estrae eventuale errore dal server */
 static void parse_error(const cJSON *root, char *err_buf, size_t err_len) {
   cJSON *err = cJSON_GetObjectItemCaseSensitive(root, "error");
   if (cJSON_IsString(err) && err_buf != NULL && err_len > 0) {
@@ -36,7 +35,7 @@ static void parse_error(const cJSON *root, char *err_buf, size_t err_len) {
   }
 }
 
-/* Estrae e valida i campi principali del JSON (map_size, current_room, player_id) */
+/* Parsa map_size, current_room, player_id */
 static int parse_base_fields(const cJSON *root, GameState *state) {
   cJSON *map_size = cJSON_GetObjectItemCaseSensitive(root, "map_size");
   cJSON *current_room = cJSON_GetObjectItemCaseSensitive(root, "current_room");
@@ -56,7 +55,7 @@ static int parse_base_fields(const cJSON *root, GameState *state) {
   return 0;
 }
 
-/** Helper: parsa una griglia JSON rows×cols e alloca la matrice int** */
+/* Parsa un array JSON 2D in una matrice int** */
 static int **parse_int_grid(const cJSON *jarr, int rows, int cols) {
   if (!cJSON_IsArray(jarr) || rows <= 0 || cols <= 0)
     return NULL;
@@ -86,7 +85,7 @@ static int **parse_int_grid(const cJSON *jarr, int rows, int cols) {
   return grid;
 }
 
-/* Alloca e popola la matrice 2D di adiacenza (adj[i][j] = 1 se c'è un corridoio) */
+/* Parsa la matrice di adiacenza */
 static int parse_adjacency(const cJSON *root, GameState *state) {
   cJSON *adj = cJSON_GetObjectItemCaseSensitive(root, "adj");
   if (!cJSON_IsArray(adj))
@@ -99,7 +98,7 @@ static int parse_adjacency(const cJSON *root, GameState *state) {
   return 0;
 }
 
-/* Alloca e popola l'array delle posizioni dei giocatori (numero stanza per ogni giocatore) */
+/* Parsa le stanze in cui si trovano i giocatori */
 static int parse_player_positions(const cJSON *root, GameState *state) {
   cJSON *players = cJSON_GetObjectItemCaseSensitive(root, "players");
   if (!cJSON_IsArray(players))
@@ -120,7 +119,7 @@ static int parse_player_positions(const cJSON *root, GameState *state) {
   return 0;
 }
 
-/* Alloca gli array per le coordinate (y, x) di ogni giocatore dentro la stanza */
+/* Parsa le coordinate (y, x) di ogni giocatore nella stanza */
 static int parse_player_coords(const cJSON *root, GameState *state) {
   state->pos_y = (int *)calloc(MAX_PLAYERS, sizeof(int));
   state->pos_x = (int *)calloc(MAX_PLAYERS, sizeof(int));
@@ -151,7 +150,7 @@ static int parse_player_coords(const cJSON *root, GameState *state) {
   return 0;
 }
 
-/* Estrae le dimensioni della stanza e alloca le matrici 2D di item e mostri */
+/* Parsa dimensioni stanza e griglie item/mostri */
 static void parse_room(const cJSON *root, GameState *state) {
   cJSON *jroom_h = cJSON_GetObjectItemCaseSensitive(root, "room_h");
   cJSON *jroom_w = cJSON_GetObjectItemCaseSensitive(root, "room_w");
@@ -168,7 +167,7 @@ static void parse_room(const cJSON *root, GameState *state) {
   state->room_monsters = parse_int_grid(jmonsters, state->room_h, state->room_w);
 }
 
-/* Estrae le statistiche globali del team (vite condivise, mostri uccisi, quest items) */
+/* Parsa statistiche del team */
 static void parse_team_stats(const cJSON *root, GameState *state) {
   cJSON *jquest = cJSON_GetObjectItemCaseSensitive(root, "quest_items_collected");
   if (cJSON_IsNumber(jquest))
@@ -183,7 +182,7 @@ static void parse_team_stats(const cJSON *root, GameState *state) {
     state->team_kills = jkills->valueint;
 }
 
-/* Estrae le statistiche individuali del giocatore */
+/* Parsa statistiche individuali del giocatore */
 static void parse_player_stats(const cJSON *root, GameState *state) {
   cJSON *pstats = cJSON_GetObjectItemCaseSensitive(root, "player_stats");
   if (!cJSON_IsObject(pstats))
@@ -207,54 +206,42 @@ static void parse_player_stats(const cJSON *root, GameState *state) {
     state->player_monsters_killed = pkills->valueint;
 }
 
-/* 
- * Decodifica una stringa JSON ricevuta dal server e popola la struttura GameState
- * Parametri:
- *   json: stringa JSON del server
- *   state: struttura da popolare
- *   err_buf: buffer per messaggi di errore dal server
- *   err_len: lunghezza del buffer degli errori
- * Ritorna: 0 se successo, -1 se errore
- */
+/* Decodifica il JSON del server e popola la struttura GameState.
+   Ritorna 0 ok, -1 errore. */
 int parse_game_state(const char *json, GameState *state, char *err_buf,
                      size_t err_len) {
-  /* Validazione parametri */
   if (json == NULL || state == NULL)
     return -1;
 
-  /* Resetta la struttura a zero prima di popolarla */
   memset(state, 0, sizeof(GameState));
 
-  /* Converte la stringa JSON in struttura dati cJSON */
   cJSON *root = cJSON_Parse(json);
   if (root == NULL)
     return -1;
 
   parse_error(root, err_buf, err_len);
 
-  if (parse_base_fields(root, state) != 0)           goto fail;
-  if (parse_adjacency(root, state) != 0)              goto fail;
-  if (parse_player_positions(root, state) != 0)       goto fail;
-  if (parse_player_coords(root, state) != 0)          goto fail;
+  /* Parsing dei campi obbligatori — se uno fallisce, pulizia e uscita */
+  int ok = (parse_base_fields(root, state) == 0 &&
+            parse_adjacency(root, state) == 0 &&
+            parse_player_positions(root, state) == 0 &&
+            parse_player_coords(root, state) == 0);
+
+  if (!ok) {
+    cJSON_Delete(root);
+    free_game_state(state);
+    return -1;
+  }
 
   parse_room(root, state);
   parse_team_stats(root, state);
   parse_player_stats(root, state);
 
-  /* Libera la struttura JSON e ritorna successo */
   cJSON_Delete(root);
   return 0;
-
-fail:
-  cJSON_Delete(root);
-  free_game_state(state);
-  return -1;
 }
 
-/* 
- * Trova tutte le stanze adiacenti a quella attuale del giocatore
- * (cioè collegate da un corridoio)
- */
+/* Trova le stanze adiacenti a quella corrente */
 static void get_adjacent_rooms(const GameState *state, int *neighbors, int *count) {
   *count = 0;
   if (!state || !state->adj)
@@ -262,19 +249,17 @@ static void get_adjacent_rooms(const GameState *state, int *neighbors, int *coun
   if (state->current_room < 0 || state->current_room >= state->map_size)
     return;
   
-  /* Scorre la riga della matrice di adiacenza per la stanza attuale */
   for (int i = 0; i < state->map_size; i++) {
-    /* Se adj[current_room][i] = 1, c'è un corridoio verso la stanza i */
     if (state->adj[state->current_room][i]) {
       neighbors[*count] = i;
       (*count)++;
-      if (*count >= 4)  /* Massimo 4 porte per stanza */
+      if (*count >= 4)
         break;
     }
   }
 }
 
-/* Determina in quale direzione (0=N, 1=E, 2=S, 3=W) si trova il muro toccato, -1 se nessuna porta */
+/* Direzione del muro toccato: 0=N, 1=E, 2=S, 3=W, -1 se nessuna porta */
 int wall_dir(const GameState *state, int new_y, int new_x) {
   if (new_y == 0 && new_x == state->room_w / 2)
     return 0; /* N */
@@ -287,24 +272,17 @@ int wall_dir(const GameState *state, int new_y, int new_x) {
   return -1;
 }
 
-/* 
- * Data una direzione (0=nord, 1=est, 2=sud, 3=ovest), 
- * ritorna il numero della stanza raggiungibile in quella direzione
- * Ritorna -1 se la direzione non è valida
- */
+/* Data una direzione, ritorna la stanza raggiungibile o -1 */
 int door_target_for_dir(const GameState *state, int dir) {
   int neighbors[4] = {-1, -1, -1, -1};
   int count = 0;
   
-  /* Ottiene le stanze adiacenti */
   get_adjacent_rooms(state, neighbors, &count);
   
-  /* Controlla se la direzione è valida */
   if (dir < 0 || dir > 3)
     return -1;
   if (dir >= count)
     return -1;
   
-  /* Ritorna il numero della stanza nella direzione specificata */
   return neighbors[dir];
 }

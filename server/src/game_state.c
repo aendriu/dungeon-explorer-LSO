@@ -35,7 +35,6 @@ static void add_corridor(int map[MAP_SIZE][MAP_SIZE], int i, int j) {
 }
 
 static void shuffle(int *arr, int n) {
-    // rand_r is the thread-safe version of rand
     for (int i = n - 1; i > 0; i--) {
         int j = rand_r(&g_rand_seed) % (i + 1);
         int tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
@@ -43,10 +42,7 @@ static void shuffle(int *arr, int n) {
 }
 
 static void build_random_order(int order[MAP_SIZE]) {
-    // 1 2 3 4 5 6 ... MAP_SIZE-1
     for (int i = 0; i < MAP_SIZE; i++) order[i] = i;
-    
-    // a caso: 6 2 4 1 5 MAP_SIZE-1 0 ... 4
     shuffle(order + 1, MAP_SIZE - 1);
 }
 
@@ -55,8 +51,7 @@ static void generate_random_map(int map[MAP_SIZE][MAP_SIZE]) {
     build_random_order(order);
 
     for (int i = 0; i < MAP_SIZE - 1; i++) {
-        // questo garantisce che tutte le stanze siano raggiungibili
-        // esempio: 0-6-2-4-1-5-MAP_SIZE-1
+        // catena: 0-6-2-4-... garantisce che tutte le stanze siano raggiungibili
         add_corridor(map, order[i], order[i + 1]);
     }
 

@@ -138,21 +138,16 @@ int action_start_game(GameState *out, char *err, size_t elen) {
 
 /* ---- poller thread ---- */
 
-/*
- * Funzione del thread di polling.
- * Ogni ~500ms chiede al server lo stato aggiornato (GET_GAME_STATE)
- * e lo scrive nella struttura condivisa protetta da mutex.
- */
+/* Thread: ogni ~500ms chiede GET_GAME_STATE e aggiorna lo stato condiviso */
 static void *poller_fn(void *arg) {
   Poller *p = (Poller *)arg;
   while (p->running) {
-    /* Dorme ~500ms, controllando il flag ogni 20ms per uscire rapidamente */
+    /* ~500ms di sleep, ma controlla running ogni 20ms */
     for (int i = 0; i < 25 && p->running; i++)
       usleep(20000);
     if (!p->running)
       break;
 
-    /* Richiesta al server (net_mutex protegge il socket internamente) */
     char *r = sendnrecv(GET_GAME_STATE);
     if (!r)
       continue;
@@ -165,7 +160,7 @@ static void *poller_fn(void *arg) {
     free(r);
     sync_room(&tmp);
 
-    /* Aggiorna lo stato condiviso */
+    /* Swap dello stato condiviso sotto mutex */
     pthread_mutex_lock(&p->mutex);
     int py = p->py, px = p->px;
     sync_pos(&tmp, &py, &px);
@@ -178,23 +173,23 @@ static void *poller_fn(void *arg) {
   return NULL;
 }
 
-/* Avvia il thread poller, prende ownership dello stato iniziale */
+/* Avvia il poller, trasferisce ownership dello stato iniziale */
 void poller_start(Poller *p, GameState *initial, int py, int px) {
   memset(p, 0, sizeof(*p));
   pthread_mutex_init(&p->mutex, NULL);
-  p->state = *initial;              /* move: trasferisce ownership */
-  memset(initial, 0, sizeof(*initial)); /* azzera l'originale */
+  p->state = *initial;
+  memset(initial, 0, sizeof(*initial));
   p->py = py;
   p->px = px;
   p->running = 1;
   pthread_create(&p->tid, NULL, poller_fn, p);
 }
 
-/* Ferma il thread poller e restituisce lo stato finale */
+/* Ferma il poller e restituisce lo stato finale */
 void poller_stop(Poller *p, GameState *out) {
   p->running = 0;
   pthread_join(p->tid, NULL);
-  *out = p->state;                  /* move: restituisce ownership */
+  *out = p->state;
   memset(&p->state, 0, sizeof(p->state));
   pthread_mutex_destroy(&p->mutex);
 }

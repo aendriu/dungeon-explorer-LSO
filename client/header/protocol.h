@@ -1,18 +1,9 @@
 #ifndef CLIENT_PROTOCOL_H
 #define CLIENT_PROTOCOL_H
 
-/*
- * Sends a request message to the server on the already-connected socket
- * and waits for a single reply.
- *
- * Returns a heap-allocated NUL-terminated string containing the reply,
- * or NULL on error/timeout.
- *
- * Caller must free
- */
-
 #include "../../utils/enums.h"
 
+/* Invio/ricezione messaggi verso il server. Il caller deve free-are il risultato. */
 char *sendnrecv(Message msg);
 char *sendnrecv_payload(Message msg, const char *payload_json);
 

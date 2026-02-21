@@ -73,7 +73,7 @@ static void render_room(WINDOW *win, const GameState *state, int py, int px,
     }
   }
 
-  /* Calcola una sola volta i target per le 4 porte (N, E, S, W) */
+  /* Target per le 4 porte (N, E, S, W) */
   int doors[4];
   for (int d = 0; d < 4; d++)
     doors[d] = door_target_for_dir(state, d);
@@ -245,7 +245,7 @@ static void render_game(WINDOW *win, const GameState *state, int py, int px,
   wrefresh(win);
 }
 
-/* Controlla se la partita è finita: 1=vittoria, -1=sconfitta, 0=in corso */
+/* 1=vittoria, -1=sconfitta, 0=in corso */
 static int check_game_over(const GameState *state) {
   if (state->quest_items_collected >= QUEST_ITEMS_TO_WIN)
     return 1;
@@ -313,7 +313,7 @@ static int game_screen(GameState *state) {
   int py = state->room_h / 2;
   int px = state->room_w / 2;
 
-  /* Avvia il thread di polling in background */
+  /* Avvia il poller in background */
   Poller poller;
   poller_start(&poller, state, py, px);
 
@@ -384,11 +384,10 @@ static int game_screen(GameState *state) {
     status[0] = '\0';
   }
 
-  /* Ferma il thread poller e recupera lo stato finale */
+  /* Ferma il poller e mostra le statistiche se partita finita */
   poller_stop(&poller, state);
   delwin(win);
 
-  /* Mostra le statistiche finali se la partita è terminata */
   if (game_over != 0)
     return show_end_stats(state, game_over > 0) ? 2 : 1;
 

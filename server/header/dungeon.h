@@ -27,7 +27,6 @@ typedef struct {
     int failed_moves;
 } Monster;
 
-// Room è una stanza del dungeon
 typedef struct {
     int id;
     int width;
@@ -36,10 +35,9 @@ typedef struct {
     Monster ***monsters;
 } Room;
 
-// Dungeon contiene più stanze
 typedef struct {
     int num_rooms;
-    Room **rooms;  // array di stanze
+    Room **rooms;
 } Dungeon;
 
 extern int quest_items_collected;

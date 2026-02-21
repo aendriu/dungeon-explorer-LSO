@@ -9,141 +9,93 @@
 #include <string.h>
 #include <sys/socket.h>
 
-/* Dimensione massima di un frame di comunicazione (4 KB) */
+/* Dimensione frame di comunicazione (4 KB) */
 enum { CLIENT_FRAME_SIZE = 4096 };
 
-/* Mutex per serializzare l'accesso al socket tra thread principale e poller */
+/* Mutex per accesso al socket tra main thread e poller */
 static pthread_mutex_t net_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-/*
- * Invia ALL i dati dal buffer al socket
- * I dati potrebbero essere inviati in più pacchetti quindi ripete finché tutto è inviato
- * Parametri:
- *   fd: file descriptor del socket
- *   buf: dati da inviare
- *   len: numero di byte da inviare
- * Ritorna: 0 se successo, -1 se errore
- */
+/* Invia len byte sul socket, gestendo invii parziali */
 static int send_all(int fd, const char *buf, size_t len) {
   size_t sent = 0;
   while (sent < len) {
-    /* Invia i dati rimanenti */
     ssize_t rc = send(fd, buf + sent, len - sent, 0);
     if (rc < 0) {
-      /* Se il segnale ha interrotto, riprova */
       if (errno == EINTR) continue;
-      return -1;  /* Errore vero */
+      return -1;
     }
-    if (rc == 0) return -1;  /* Connessione chiusa dal server */
-    sent += (size_t)rc;  /* Aggiorna quanti byte sono stati inviati */
+    if (rc == 0) return -1;
+    sent += (size_t)rc;
   }
-  return 0;  /* Tutti i dati inviati con successo */
+  return 0;
 }
 
-/*
- * Riceve TUTTI i dati nel buffer dal socket
- * I dati potrebbero arrivare in più pacchetti quindi ripete finché tutto è ricevuto
- * Parametri:
- *   fd: file descriptor del socket
- *   buf: buffer dove mettere i dati ricevuti
- *   len: numero di byte da ricevere
- * Ritorna: 0 se successo, -1 se errore
- */
+/* Riceve esattamente len byte dal socket */
 static int recv_all(int fd, char *buf, size_t len) {
   size_t received = 0;
   while (received < len) {
-    /* Riceve i dati rimanenti */
     ssize_t rc = recv(fd, buf + received, len - received, 0);
     if (rc < 0) {
-      /* Se il segnale ha interrotto, riprova */
       if (errno == EINTR) continue;
-      return -1;  /* Errore vero (es: timeout) */
+      return -1;
     }
-    if (rc == 0) return -1;  /* Connessione chiusa dal server */
-    received += (size_t)rc;  /* Aggiorna quanti byte sono stati ricevuti */
+    if (rc == 0) return -1;
+    received += (size_t)rc;
   }
-  return 0;  /* Tutti i dati ricevuti con successo */
+  return 0;
 }
 
-/*
- * Invia una frame al server e attende la risposta
- * Parametri:
- *   frame: stringa da inviare (JSON o numero intero)
- * Ritorna: stringa malloc'ata con la risposta del server, NULL se errore
- *          Il caller deve liberare questa memoria
- */
-static char *sendnrecv_frame(const char *frame) {
-  pthread_mutex_lock(&net_mutex);
-
-  /* Controlla che il socket sia connesso */
+/* Logica interna di invio/ricezione (mutex già acquisito) */
+static char *sendnrecv_frame_locked(const char *frame) {
   if (sock < 0) {
     fprintf(stderr, "[CLIENT] sendnrecv: socket not connected\n");
-    goto fail;
+    return NULL;
   }
 
-  /* Prepara un buffer di dimensione fissa e copia la frame */
   char buffer[CLIENT_FRAME_SIZE];
   memset(buffer, 0, sizeof(buffer));
   strncpy(buffer, frame, sizeof(buffer) - 1);
 
-  /* Invia la frame al server */
   if (send_all(sock, buffer, sizeof(buffer)) < 0) {
     perror("[CLIENT] sendnrecv: send");
-    goto fail;
+    return NULL;
   }
 
-  /* Alloca memoria per la risposta del server */
   char *reply = (char *)calloc(CLIENT_FRAME_SIZE + 1, 1);
   if (reply == NULL)
-    goto fail;
+    return NULL;
 
-  /* Riceve la risposta dal server */
   if (recv_all(sock, reply, CLIENT_FRAME_SIZE) < 0) {
     free(reply);
-    goto fail;
+    return NULL;
   }
 
-  pthread_mutex_unlock(&net_mutex);
   return reply;
-
-fail:
-  pthread_mutex_unlock(&net_mutex);
-  return NULL;
 }
 
-/*
- * Invia un messaggio al server (numero intero) senza payload
- * Parametri:
- *   msg: numero del messaggio/comando (es: MOVE_NORTH, ATTACK, ecc)
- * Ritorna: risposta del server in JSON, NULL se errore
- *          Il caller deve liberare questa memoria
- */
+/* Invia una frame e riceve la risposta, serializzando con mutex */
+static char *sendnrecv_frame(const char *frame) {
+  pthread_mutex_lock(&net_mutex);
+  char *result = sendnrecv_frame_locked(frame);
+  pthread_mutex_unlock(&net_mutex);
+  return result;
+}
+
+/* Invia un comando (intero) al server, ritorna la risposta (da free-are) */
 char *sendnrecv(Message msg) {
-  char frame[CLIENT_FRAME_SIZE];
-  memset(frame, 0, sizeof(frame));
-  /* Formatta il messaggio come numero intero */
+  char frame[16];
   snprintf(frame, sizeof(frame), "%d", msg);
   return sendnrecv_frame(frame);
 }
 
-/*
- * Invia un messaggio al server con dati JSON nel payload
- * Parametri:
- *   msg: numero del messaggio/comando
- *   payload_json: stringa JSON con i dati (es: posizione, item scelto)
- * Ritorna: risposta del server in JSON, NULL se errore
- *          Il caller deve liberare questa memoria
- */
+/* Invia un comando con payload JSON, ritorna la risposta (da free-are) */
 char *sendnrecv_payload(Message msg, const char *payload_json) {
-  char frame[CLIENT_FRAME_SIZE];
-  memset(frame, 0, sizeof(frame));
+  char frame[256];
   
-  /* Se il payload non è vuoto, lo aggiunge alla frame */
   if (payload_json && payload_json[0] != '\0') {
     snprintf(frame, sizeof(frame), "{\"cmd\":%d,\"payload\":%s}", msg,
              payload_json);
   } else {
-    /* Se il payload è vuoto, invia solo il comando */
     snprintf(frame, sizeof(frame), "{\"cmd\":%d}", msg);
   }
   return sendnrecv_frame(frame);

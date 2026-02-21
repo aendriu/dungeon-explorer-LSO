@@ -19,7 +19,7 @@ extern Dungeon *game_dungeon;
 typedef struct {
     int  map_size;
     int  map[MAP_SIZE][MAP_SIZE];
-    int  positions[MAX_PLAYERS]; // what room are they in
+    int  positions[MAX_PLAYERS];
     int  pos_y[MAX_PLAYERS];
     int  pos_x[MAX_PLAYERS];
     bool started;
