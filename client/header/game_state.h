@@ -30,7 +30,7 @@ typedef struct {
 void free_game_state(GameState *state);
 int parse_game_state(const char *json, GameState *state, char *err_buf,
                      size_t err_len);
-void get_adjacent_rooms(const GameState *state, int *neighbors, int *count);
+int wall_dir(const GameState *state, int new_y, int new_x);
 int door_target_for_dir(const GameState *state, int dir);
 
 #endif

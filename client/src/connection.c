@@ -1,6 +1,11 @@
 #define _POSIX_C_SOURCE 200112L
 #include "../header/connection.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/socket.h>
 #include <sys/time.h>
+#include <unistd.h>
 
 /* Socket globale della connessione con il server */
 int sock = -1;
@@ -43,7 +48,7 @@ static void init_servinfo(const char *host, const char *port) {
  * Crea un socket TCP e lo assegna alla variabile globale 'sock'
  * Il socket non è ancora connesso, usare connect_to_server() per connettersi
  */
-void socket_create() {
+static void socket_create(void) {
     /* Crea un socket IPv4 TCP */
     sock = socket(servinfo->ai_family, servinfo->ai_socktype, servinfo->ai_protocol);
     if( sock == -1 ) {

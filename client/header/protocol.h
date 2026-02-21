@@ -9,22 +9,11 @@
  * or NULL on error/timeout.
  *
  * Caller must free
+ */
 
-*/
-
-#include <errno.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/socket.h>
-#include <sys/time.h>
-#include <unistd.h>
-
-#include "../header/connection.h"
 #include "../../utils/enums.h"
 
 char *sendnrecv(Message msg);
 char *sendnrecv_payload(Message msg, const char *payload_json);
-char *sendnwait(const char *frame);
 
 #endif

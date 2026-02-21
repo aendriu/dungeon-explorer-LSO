@@ -1,9 +1,19 @@
 #define _POSIX_C_SOURCE 200112L
 
 #include "../header/protocol.h"
+#include "../header/connection.h"
+#include <errno.h>
+#include <pthread.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/socket.h>
 
 /* Dimensione massima di un frame di comunicazione (4 KB) */
 enum { CLIENT_FRAME_SIZE = 4096 };
+
+/* Mutex per serializzare l'accesso al socket tra thread principale e poller */
+static pthread_mutex_t net_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 /*
  * Invia ALL i dati dal buffer al socket
@@ -63,10 +73,12 @@ static int recv_all(int fd, char *buf, size_t len) {
  *          Il caller deve liberare questa memoria
  */
 static char *sendnrecv_frame(const char *frame) {
+  pthread_mutex_lock(&net_mutex);
+
   /* Controlla che il socket sia connesso */
   if (sock < 0) {
     fprintf(stderr, "[CLIENT] sendnrecv: socket not connected\n");
-    return NULL;
+    goto fail;
   }
 
   /* Prepara un buffer di dimensione fissa e copia la frame */
@@ -77,22 +89,26 @@ static char *sendnrecv_frame(const char *frame) {
   /* Invia la frame al server */
   if (send_all(sock, buffer, sizeof(buffer)) < 0) {
     perror("[CLIENT] sendnrecv: send");
-    return NULL;
+    goto fail;
   }
 
   /* Alloca memoria per la risposta del server */
   char *reply = (char *)calloc(CLIENT_FRAME_SIZE + 1, 1);
-  if (reply == NULL) {
-    return NULL;
-  }
+  if (reply == NULL)
+    goto fail;
 
   /* Riceve la risposta dal server */
   if (recv_all(sock, reply, CLIENT_FRAME_SIZE) < 0) {
     free(reply);
-    return NULL;
+    goto fail;
   }
 
-  return reply;  /* Ritorna la risposta (caller deve liberare) */
+  pthread_mutex_unlock(&net_mutex);
+  return reply;
+
+fail:
+  pthread_mutex_unlock(&net_mutex);
+  return NULL;
 }
 
 /*
@@ -133,17 +149,3 @@ char *sendnrecv_payload(Message msg, const char *payload_json) {
   return sendnrecv_frame(frame);
 }
 
-/*
- * Invia una frame personalizzata già formattata al server
- * Utile quando la frame non segue il formato standard
- * Parametri:
- *   frame: stringa JSON o messaggio personalizzato
- * Ritorna: risposta del server, NULL se errore
- *          Il caller deve liberare questa memoria
- */
-char *sendnwait(const char *frame) {
-  if (frame == NULL) {
-    return NULL;
-  }
-  return sendnrecv_frame(frame);
-}

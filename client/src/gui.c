@@ -1,7 +1,12 @@
 #include "../header/gui.h"
-#include "cJSON.h"
+#include "../header/connection.h"
+#include "../header/game_actions.h"
 #include "../header/game_state.h"
 #include "../header/ui_helpers.h"
+#include <ncurses.h>
+#include <stdbool.h>
+#include <stdio.h>
+#include <string.h>
 
 int start_y, start_x;
 
@@ -19,71 +24,6 @@ static bool is_move_key(int ch, int *dy, int *dx) {
   else
     return false;
   return true;
-}
-
-static int wall_dir(const GameState *state, int new_y, int new_x) {
-  if (new_y == 0 && new_x == state->room_w / 2)
-    return 0; /* N */
-  if (new_x == state->room_w - 1 && new_y == state->room_h / 2)
-    return 1; /* E */
-  if (new_y == state->room_h - 1 && new_x == state->room_w / 2)
-    return 2; /* S */
-  if (new_x == 0 && new_y == state->room_h / 2)
-    return 3; /* W */
-  return -1;
-}
-
-static void sync_self_pos(const GameState *state, int *py, int *px) {
-  if (state->pos_y && state->pos_x && state->player_id >= 0 &&
-      state->player_id < MAX_PLAYERS) {
-    int sy = state->pos_y[state->player_id];
-    int sx = state->pos_x[state->player_id];
-    if (sy >= 1 && sy < state->room_h - 1 && sx >= 1 && sx < state->room_w - 1) {
-      *py = sy;
-      *px = sx;
-    }
-  }
-}
-
-static int update_state_from_reply(GameState *state, char *reply, char *status,
-                                   size_t status_len, int *py, int *px) {
-  GameState updated = {0};
-  char parse_err[64] = {0};
-  if (parse_game_state(reply, &updated, parse_err, sizeof(parse_err)) < 0) {
-    snprintf(status, status_len, "Errore parsing risposta");
-    free(reply);
-    return -1;
-  }
-
-  free(reply);
-  free_game_state(state);
-  *state = updated;
-  if (state->players && state->player_id >= 0 &&
-      state->player_id < MAX_PLAYERS) {
-    state->current_room = state->players[state->player_id];
-  }
-  sync_self_pos(state, py, px);
-
-  if (parse_err[0] != '\0') {
-    /* Messaggi informativi dal server (non sono errori fatali) */
-    if (strcmp(parse_err, MSG_BOOBY_TRAP) == 0) {
-      snprintf(status, status_len, "Un mostro aveva piazzato una trappola qui!");
-      return 0;
-    }
-    if (strcmp(parse_err, MSG_APPLE_HEAL) == 0) {
-      snprintf(status, status_len, "Hai trovato una mela! +1 vita");
-      return 0;
-    }
-    if (strcmp(parse_err, MSG_TEAM_WON) == 0 ||
-        strcmp(parse_err, MSG_TEAM_DEFEATED) == 0) {
-      snprintf(status, status_len, "%s", parse_err);
-      return 0;
-    }
-    snprintf(status, status_len, "Errore: %s", parse_err);
-    return -1;
-  }
-
-  return 0;
 }
 
 static void render_minimap(WINDOW *win, const GameState *state, int top, int left);
@@ -119,11 +59,9 @@ static void render_room(WINDOW *win, const GameState *state, int py, int px,
       if (y == 0 || y == rh - 1 || x == 0 || x == rw - 1) {
         ch = '#';
       } else if (state->room_monsters != NULL &&
-                 y < state->room_h && x < state->room_w &&
                  state->room_monsters[y][x] != 0) {
         ch = 'M'; /* monster */
       } else if (state->room_items != NULL &&
-                 y < state->room_h && x < state->room_w &&
                  state->room_items[y][x] != 0) {
         int v = state->room_items[y][x];
         if (v == 2)      ch = 'Q'; /* quest */
@@ -135,34 +73,35 @@ static void render_room(WINDOW *win, const GameState *state, int py, int px,
     }
   }
 
-  int door_y_n = top + 0;
-  int door_x_n = left + rw / 2;
-  int door_y_s = top + rh - 1;
-  int door_x_s = left + rw / 2;
-  int door_y_w = top + rh / 2;
-  int door_x_w = left + 0;
-  int door_y_e = top + rh / 2;
-  int door_x_e = left + rw - 1;
+  /* Calcola una sola volta i target per le 4 porte (N, E, S, W) */
+  int doors[4];
+  for (int d = 0; d < 4; d++)
+    doors[d] = door_target_for_dir(state, d);
 
-  if (door_target_for_dir(state, 0) != -1) {
-    mvwaddch(win, door_y_n, door_x_n - 1, ' ');
-    mvwaddch(win, door_y_n, door_x_n,     '+');
-    mvwaddch(win, door_y_n, door_x_n + 1, ' ');
+  int mid_y = top + rh / 2;
+  int mid_x = left + rw / 2;
+
+  if (doors[0] != -1) {
+    mvwaddch(win, top, mid_x - 1, ' ');
+    mvwaddch(win, top, mid_x,     '+');
+    mvwaddch(win, top, mid_x + 1, ' ');
   }
-  if (door_target_for_dir(state, 1) != -1) {
-    mvwaddch(win, door_y_e - 1, door_x_e, ' ');
-    mvwaddch(win, door_y_e,     door_x_e, '+');
-    mvwaddch(win, door_y_e + 1, door_x_e, ' ');
+  if (doors[1] != -1) {
+    int ex = left + rw - 1;
+    mvwaddch(win, mid_y - 1, ex, ' ');
+    mvwaddch(win, mid_y,     ex, '+');
+    mvwaddch(win, mid_y + 1, ex, ' ');
   }
-  if (door_target_for_dir(state, 2) != -1) {
-    mvwaddch(win, door_y_s, door_x_s - 1, ' ');
-    mvwaddch(win, door_y_s, door_x_s,     '+');
-    mvwaddch(win, door_y_s, door_x_s + 1, ' ');
+  if (doors[2] != -1) {
+    int sy = top + rh - 1;
+    mvwaddch(win, sy, mid_x - 1, ' ');
+    mvwaddch(win, sy, mid_x,     '+');
+    mvwaddch(win, sy, mid_x + 1, ' ');
   }
-  if (door_target_for_dir(state, 3) != -1) {
-    mvwaddch(win, door_y_w, door_x_w, '+');
-    mvwaddch(win, door_y_w - 1, door_x_w, ' ');
-    mvwaddch(win, door_y_w + 1, door_x_w, ' ');
+  if (doors[3] != -1) {
+    mvwaddch(win, mid_y, left, '+');
+    mvwaddch(win, mid_y - 1, left, ' ');
+    mvwaddch(win, mid_y + 1, left, ' ');
   }
 
   char self_sym = (state->player_id >= 0 && state->player_id < MAX_PLAYERS)
@@ -229,8 +168,7 @@ static void render_room(WINDOW *win, const GameState *state, int py, int px,
 
   int list_y = top + rh + 1;
   mvwprintw(win, list_y, 2, "Porte: N=%d E=%d S=%d W=%d",
-            door_target_for_dir(state, 0), door_target_for_dir(state, 1),
-            door_target_for_dir(state, 2), door_target_for_dir(state, 3));
+            doors[0], doors[1], doors[2], doors[3]);
 
   render_minimap(win, state, top, left);
 }
@@ -307,13 +245,12 @@ static void render_game(WINDOW *win, const GameState *state, int py, int px,
   wrefresh(win);
 }
 
+/* Controlla se la partita è finita: 1=vittoria, -1=sconfitta, 0=in corso */
 static int check_game_over(const GameState *state) {
-  if (state->quest_items_collected >= QUEST_ITEMS_TO_WIN) {
-    return show_end_stats(state, true) ? 2 : 1;
-  }
-  if (state->team_lives <= 0) {
-    return show_end_stats(state, false) ? 2 : 1;
-  }
+  if (state->quest_items_collected >= QUEST_ITEMS_TO_WIN)
+    return 1;
+  if (state->team_lives <= 0)
+    return -1;
   return 0;
 }
 
@@ -359,61 +296,7 @@ static int show_end_stats(const GameState *state, bool won) {
   return 0;
 }
 
-static void show_inventories(const char *json_str) {
-  WINDOW *win = newwin(0, 0, 0, 0);
-  wattron(win, A_BOLD);
-  mvwprintw(win, 1, 2, ">>> INVENTARI DEI GIOCATORI <<<");
-  wattroff(win, A_BOLD);
-
-  cJSON *root = cJSON_Parse(json_str);
-  if (!root) {
-    mvwprintw(win, 3, 2, "Errore nel parsing degli inventari");
-    wrefresh(win);
-    sleep(2);
-    delwin(win);
-    return;
-  }
-
-  cJSON *inventories = cJSON_GetObjectItemCaseSensitive(root, "inventories");
-  if (!cJSON_IsArray(inventories)) {
-    mvwprintw(win, 3, 2, "Nessun inventario disponibile");
-    wrefresh(win);
-    sleep(2);
-    cJSON_Delete(root);
-    delwin(win);
-    return;
-  }
-
-  int row = 3;
-  cJSON *player_obj = NULL;
-  cJSON_ArrayForEach(player_obj, inventories) {
-    cJSON *player_id = cJSON_GetObjectItemCaseSensitive(player_obj, "player_id");
-    cJSON *normal = cJSON_GetObjectItemCaseSensitive(player_obj, "normal_items");
-    cJSON *quest = cJSON_GetObjectItemCaseSensitive(player_obj, "quest_items");
-    cJSON *total = cJSON_GetObjectItemCaseSensitive(player_obj, "total_items");
-
-    if (!cJSON_IsNumber(player_id) || !cJSON_IsNumber(normal) || 
-        !cJSON_IsNumber(quest) || !cJSON_IsNumber(total)) {
-      continue;
-    }
-
-    wattron(win, A_BOLD);
-    mvwprintw(win, row++, 2, "Giocatore %d:", player_id->valueint);
-    wattroff(win, A_BOLD);
-    mvwprintw(win, row++, 4, "Item Normali: %d", normal->valueint);
-    mvwprintw(win, row++, 4, "Item Quest: %d", quest->valueint);
-    mvwprintw(win, row++, 4, "Totale: %d", total->valueint);
-    row++;
-  }
-
-  mvwprintw(win, row + 1, 2, "Premi un tasto per continuare...");
-  wrefresh(win);
-  wgetch(win);
-  cJSON_Delete(root);
-  delwin(win);
-}
-
-int game_screen(GameState *state) {
+static int game_screen(GameState *state) {
   int win_h = start_y - 2;
   int win_w = start_x - 2;
   if (win_h < 10)
@@ -423,102 +306,96 @@ int game_screen(GameState *state) {
 
   WINDOW *win = newwin(win_h, win_w, 1, 1);
   keypad(win, TRUE);
+  wtimeout(win, 200); /* non-bloccante: ritorna ERR dopo 200ms */
   wclear(win);
   wrefresh(win);
 
   int py = state->room_h / 2;
   int px = state->room_w / 2;
 
-  int prev_lives = state->team_lives;
+  /* Avvia il thread di polling in background */
+  Poller poller;
+  poller_start(&poller, state, py, px);
+
+  int prev_lives = 0;
+  int game_over = 0;
   char status[128] = {0};
-  render_game(win, state, py, px, NULL);
 
-  while (1) {
+  /* Prima renderizzazione */
+  pthread_mutex_lock(&poller.mutex);
+  prev_lives = poller.state.team_lives;
+  render_game(win, &poller.state, poller.py, poller.px, NULL);
+  pthread_mutex_unlock(&poller.mutex);
+
+  while (game_over == 0) {
     int ch = wgetch(win);
-    if (ch == 'q' || ch == 'Q') {
+
+    if (ch == 'q' || ch == 'Q')
       break;
-    }
+
+    /* Gestione input: azioni di gioco sotto mutex */
     int dy = 0, dx = 0;
-    if (!is_move_key(ch, &dy, &dx))
-      continue;
+    if (ch != ERR && is_move_key(ch, &dy, &dx)) {
+      pthread_mutex_lock(&poller.mutex);
+      status[0] = '\0';
+      int new_y = poller.py + dy;
+      int new_x = poller.px + dx;
+      bool at_wall = (new_y <= 0 || new_y >= poller.state.room_h - 1 ||
+                      new_x <= 0 || new_x >= poller.state.room_w - 1);
 
-    int new_y = py + dy;
-    int new_x = px + dx;
-    int at_wall = (new_y <= 0 || new_y >= state->room_h - 1 || new_x <= 0 ||
-                   new_x >= state->room_w - 1);
-    if (at_wall) {
-      int dir = wall_dir(state, new_y, new_x);
-      int target = (dir < 0) ? -1 : door_target_for_dir(state, dir);
-      if (target == -1) {
-        char *poll = sendnrecv(GET_GAME_STATE);
-        if (poll == NULL) {
-          snprintf(status, sizeof(status), "Server non risponde");
-          render_game(win, state, py, px, status);
-          continue;
+      if (at_wall) {
+        int dir = wall_dir(&poller.state, new_y, new_x);
+        int target = (dir < 0) ? -1 : door_target_for_dir(&poller.state, dir);
+        if (target == -1) {
+          if (action_poll_state(&poller.state, status, sizeof(status),
+                                &poller.py, &poller.px) == 0
+              && status[0] == '\0')
+            snprintf(status, sizeof(status), "Porta chiusa");
+        } else {
+          if (action_move_to_room(&poller.state, target, status,
+                                  sizeof(status), &poller.py, &poller.px) == 0
+              && status[0] == '\0')
+            snprintf(status, sizeof(status), "Sei entrato nella stanza %d",
+                     target);
         }
-        if (update_state_from_reply(state, poll, status, sizeof(status), &py,
-                                    &px) < 0) {
-          render_game(win, state, py, px, status);
-          continue;
-        }
-        snprintf(status, sizeof(status), "Porta chiusa");
-        render_game(win, state, py, px, status);
-        continue;
+      } else {
+        poller.py = new_y;
+        poller.px = new_x;
+        action_update_pos(&poller.state, poller.py, poller.px, status,
+                          sizeof(status), &poller.py, &poller.px);
       }
-
-      char payload[64];
-      snprintf(payload, sizeof(payload), "{\"target\":%d}", target);
-      char *reply = sendnrecv_payload(MOVE_PLAYER, payload);
-      if (reply == NULL) {
-        snprintf(status, sizeof(status), "Server non risponde");
-        render_game(win, state, py, px, status);
-        continue;
-      }
-      py = state->room_h / 2;
-      px = state->room_w / 2;
-      if (update_state_from_reply(state, reply, status, sizeof(status), &py,
-                                  &px) < 0) {
-        render_game(win, state, py, px, status);
-        continue;
-      }
-      snprintf(status, sizeof(status), "Sei entrato nella stanza %d", target);
-      render_game(win, state, py, px, status);
-      int go1 = check_game_over(state);
-      if (go1) { delwin(win); return go1; }
-      continue;
+      pthread_mutex_unlock(&poller.mutex);
     }
 
-    py = new_y;
-    px = new_x;
-    char payload[64];
-    snprintf(payload, sizeof(payload), "{\"y\":%d,\"x\":%d}", py, px);
-    char *reply = sendnrecv_payload(UPDATE_PLAYER_POSITION, payload);
-    if (reply == NULL) {
-      snprintf(status, sizeof(status), "Server non risponde");
-      render_game(win, state, py, px, status);
-      continue;
-    }
-    if (update_state_from_reply(state, reply, status, sizeof(status), &py,
-                                &px) < 0) {
-      render_game(win, state, py, px, status);
-      continue;
-    }
-    if (state->team_lives < prev_lives) {
-      snprintf(status, sizeof(status), "Il team ha perso una vita! Vite: %d", state->team_lives);
-      render_game(win, state, py, px, status);
-    } else {
-      render_game(win, state, py, px, NULL);
-    }
-    prev_lives = state->team_lives;
-    int go2 = check_game_over(state);
-    if (go2) { delwin(win); return go2; }
+    /* Lettura stato condiviso, controllo eventi, render (sotto mutex) */
+    pthread_mutex_lock(&poller.mutex);
+
+    if (poller.state.team_lives < prev_lives && status[0] == '\0')
+      snprintf(status, sizeof(status),
+               "Il team ha perso una vita! Vite: %d", poller.state.team_lives);
+    prev_lives = poller.state.team_lives;
+
+    game_over = check_game_over(&poller.state);
+    if (game_over == 0)
+      render_game(win, &poller.state, poller.py, poller.px,
+                  status[0] ? status : NULL);
+
+    pthread_mutex_unlock(&poller.mutex);
+    status[0] = '\0';
   }
 
+  /* Ferma il thread poller e recupera lo stato finale */
+  poller_stop(&poller, state);
   delwin(win);
+
+  /* Mostra le statistiche finali se la partita è terminata */
+  if (game_over != 0)
+    return show_end_stats(state, game_over > 0) ? 2 : 1;
+
   return 0;
 }
 
-void init_ncurses() {
+void init_ncurses(void) {
   initscr();
   cbreak();
   noecho();
@@ -536,7 +413,7 @@ void init_ncurses() {
         esci
 */
 
-UserChoice welcome_menu() {
+UserChoice welcome_menu(void) {
 
   int height = 7;
   int width = 22;
@@ -597,7 +474,7 @@ UserChoice welcome_menu() {
 
     switch (ch) {
     case KEY_UP:
-      choice = (choice + 2) % 2;
+      choice = (choice + 1) % 2;
       break;
     case KEY_DOWN:
       choice = (choice + 1) % 2;
@@ -626,9 +503,6 @@ int prompt_server_address(char *host, size_t host_sz, char *port,
   const char *title = "DUNGEON CRAWLER";
   const char *subtitle = "Inserisci IP e porta del server";
 
-  int title_x = (start_x - (int)strlen(title)) / 2;
-  if (title_x < 0)
-    title_x = 0;
   int subtitle_x = (start_x - (int)strlen(subtitle)) / 2;
   if (subtitle_x < 0)
     subtitle_x = 0;
@@ -664,30 +538,11 @@ int prompt_server_address(char *host, size_t host_sz, char *port,
   return 0;
 }
 
-/*
-    Lobby screen: 4 colonne (1 per giocatore).
-    Il giocatore 1 ha il pulsante "Inizia".
-*/
-static int parse_connected_players(const char *reply) {
-  if (reply == NULL)
-    return -1;
-
-  while (*reply == ' ' || *reply == '\t' || *reply == '\r' || *reply == '\n')
-    reply++;
-  if (*reply < '0' || *reply > '9')
-    return -1;
-
-  int n = atoi(reply);
-  if (n < 0)
-    n = 0;
-  if (n > 4)
-    n = 4;
-  return n;
-}
-
 int lobby_screen(void) {
   int my_player_id = -1;
-  init_ncurses();
+  getmaxyx(stdscr, start_y, start_x);
+  clear();
+  refresh();
   keypad(stdscr, TRUE);
 
   const char *title = "LOBBY";
@@ -717,70 +572,21 @@ int lobby_screen(void) {
   while (1) {
     /* Poll server every ~2 ticks (about 800ms) */
     if ((tick++ % 2) == 0) {
-      char *reply = sendnrecv(GET_N_OF_CONNECTED_PLAYERS);
-      if (reply == NULL) {
-        show_popup(win, "Connessione persa o server non risponde.",
-                   "Premi un tasto per tornare al menu.", NULL);
+      char err[80] = {0};
+      int n = action_poll_lobby(err, sizeof(err));
+      if (n < 0) {
+        const char *l1 = (n == -1)
+            ? "Connessione persa o server non risponde."
+            : "Impossibile entrare in lobby.";
+        const char *err_hint = "Premi un tasto per tornare al menu.";
+        show_popup(win, l1, (n == -2) ? err : err_hint, (n == -2) ? err_hint : NULL);
         wgetch(win);
         delwin(win);
         return -1;
       }
-
-      /* Check if it's inventories JSON */
-      if (reply[0] == '{') {
-        show_inventories(reply);
-        free(reply);
-        continue;
-      }
-
-      /* Check if team was defeated */
-      if (strncmp(reply, MSG_TEAM_DEFEATED, strlen(MSG_TEAM_DEFEATED)) == 0) {
-        werase(win);
-        box(win, 0, 0);
-        mvwprintw(win, 2, 2, "IL TEAM E' STATO SCONFITTO!");
-        mvwprintw(win, 3, 2, "Torniamo alla lobby...");
-        wrefresh(win);
-        sleep(2);
-        free(reply);
-        delwin(win);
-        endwin();
-        return -1;
-      }
-
-      /* Check if team won */
-      if (strncmp(reply, MSG_TEAM_WON, strlen(MSG_TEAM_WON)) == 0) {
-        werase(win);
-        box(win, 0, 0);
-        mvwprintw(win, 2, 2, "IL TEAM HA VINTO!");
-        mvwprintw(win, 3, 2, "Hai collezionato tutti gli item quest!");
-        mvwprintw(win, 5, 2, "Torniamo alla lobby...");
-        wrefresh(win);
-        sleep(3);
-        free(reply);
-        delwin(win);
-        endwin();
-        return -1;
-      }
-
-      int parsed = parse_connected_players(reply);
-      if (parsed < 0) {
-        char reason[80] = {0};
-        snprintf(reason, sizeof(reason), "%.*s", 60, reply);
-        show_popup(win, "Impossibile entrare in lobby.", reason,
-                   "Premi un tasto per tornare al menu.");
-        free(reply);
-        wgetch(win);
-        delwin(win);
-        return -1;
-      }
-
-      connected_players = parsed;
-
-      if (my_player_id == -1) {
-        my_player_id = connected_players - 1;
-      }
-
-      free(reply);
+      connected_players = n;
+      if (my_player_id == -1)
+        my_player_id = n - 1;
     }
 
     werase(win);
@@ -798,58 +604,36 @@ int lobby_screen(void) {
       hint_x = 1;
     mvwprintw(win, 2, hint_x, "%s", hint);
 
-    int inner_w = win_w - 2;
-    int col_w = inner_w / 4;
+    int col_w = (win_w - 2) / 4;
     if (col_w < 10)
       col_w = 10;
 
-    int sep1 = 1 + col_w;
-    int sep2 = 1 + col_w * 2;
-    int sep3 = 1 + col_w * 3;
+    int sep[3] = { 1 + col_w, 1 + col_w * 2, 1 + col_w * 3 };
+    int col_x[4] = { 2, sep[0] + 2, sep[1] + 2, sep[2] + 2 };
+    static const char psym[4] = {
+        PLAYER_1_SYMBOL, PLAYER_2_SYMBOL,
+        PLAYER_3_SYMBOL, PLAYER_4_SYMBOL };
 
-    for (int r = 3; r < win_h - 1; r++) {
-      if (sep1 < win_w - 1)
-        mvwaddch(win, r, sep1, ACS_VLINE);
-      if (sep2 < win_w - 1)
-        mvwaddch(win, r, sep2, ACS_VLINE);
-      if (sep3 < win_w - 1)
-        mvwaddch(win, r, sep3, ACS_VLINE);
-    }
+    for (int r = 3; r < win_h - 1; r++)
+      for (int s = 0; s < 3; s++)
+        if (sep[s] < win_w - 1)
+          mvwaddch(win, r, sep[s], ACS_VLINE);
 
     mvwprintw(win, 3, 2, "Connessi: %d/4", connected_players);
-    mvwprintw(win, 4, 2, "Giocatore 1");
-    mvwprintw(win, 4, sep1 + 2, "Giocatore 2");
-    mvwprintw(win, 4, sep2 + 2, "Giocatore 3");
-    mvwprintw(win, 4, sep3 + 2, "Giocatore 4");
-
-    mvwprintw(win, 5, 2, "%s", (connected_players >= 1) ? "Connesso" : "Vuoto");
-    mvwprintw(win, 5, sep1 + 2, "%s",
-              (connected_players >= 2) ? "Connesso" : "Vuoto");
-    mvwprintw(win, 5, sep2 + 2, "%s",
-              (connected_players >= 3) ? "Connesso" : "Vuoto");
-    mvwprintw(win, 5, sep3 + 2, "%s",
-              (connected_players >= 4) ? "Connesso" : "Vuoto");
+    for (int i = 0; i < 4; i++) {
+      mvwprintw(win, 4, col_x[i], "Giocatore %d", i + 1);
+      mvwprintw(win, 5, col_x[i], "%s",
+                (connected_players >= i + 1) ? "Connesso" : "Vuoto");
+    }
 
     mvwhline(win, 6, 1, ' ', win_w - 2);
-    if (sep1 < win_w - 1)
-      mvwaddch(win, 6, sep1, ACS_VLINE);
-    if (sep2 < win_w - 1)
-      mvwaddch(win, 6, sep2, ACS_VLINE);
-    if (sep3 < win_w - 1)
-      mvwaddch(win, 6, sep3, ACS_VLINE);
+    for (int s = 0; s < 3; s++)
+      if (sep[s] < win_w - 1)
+        mvwaddch(win, 6, sep[s], ACS_VLINE);
 
-    if (my_player_id == 0 && connected_players >= 1) {
-      mvwaddch(win, 6, 2, PLAYER_1_SYMBOL);
-    }
-    if (my_player_id == 1 && connected_players >= 2) {
-      mvwaddch(win, 6, sep1 + 2, PLAYER_2_SYMBOL);
-    }
-    if (my_player_id == 2 && connected_players >= 3) {
-      mvwaddch(win, 6, sep2 + 2, PLAYER_3_SYMBOL);
-    }
-    if (my_player_id == 3 && connected_players >= 4) {
-      mvwaddch(win, 6, sep3 + 2, PLAYER_4_SYMBOL);
-    }
+    if (my_player_id >= 0 && my_player_id < 4 &&
+        connected_players >= my_player_id + 1)
+      mvwaddch(win, 6, col_x[my_player_id], psym[my_player_id]);
 
     wattron(win, A_REVERSE);
     mvwprintw(win, 7, 4, "[ Inizia ]");
@@ -859,46 +643,18 @@ int lobby_screen(void) {
 
     int ch = wgetch(win);
     if (ch == '\n' || ch == KEY_ENTER) {
-      char *reply = sendnrecv(START_GAME);
-      if (reply == NULL) {
-        show_popup(win, "Server non risponde all'avvio partita.",
-                   "Premi un tasto per tornare al menu.", NULL);
-        wgetch(win);
-        delwin(win);
-        return -1;
-      }
-
       GameState state = {0};
-      char parse_err[64] = {0};
-      if (parse_game_state(reply, &state, parse_err, sizeof(parse_err)) < 0) {
-        show_popup(win, "Errore nel parsing dello stato di gioco.",
-                   "Premi un tasto per tornare al menu.", NULL);
-        free(reply);
+      char err[128] = {0};
+      if (action_start_game(&state, err, sizeof(err)) < 0) {
+        show_popup(win, err, "Premi un tasto per tornare al menu.", NULL);
         wgetch(win);
         delwin(win);
         return -1;
       }
 
-      if (parse_err[0] != '\0') {
-        char errline[128];
-        snprintf(errline, sizeof(errline), "Errore avvio partita: %s",
-                 parse_err);
-        show_popup(win, errline, "Premi un tasto per tornare al menu.", NULL);
-        free(reply);
-        free_game_state(&state);
-        wgetch(win);
-        delwin(win);
-        return -1;
-      }
-
-      free(reply);
       delwin(win);
       clear();
       refresh();
-      if (state.players && state.player_id >= 0 &&
-          state.player_id < MAX_PLAYERS) {
-        state.current_room = state.players[state.player_id];
-      }
       int result = game_screen(&state);
       free_game_state(&state);
 
@@ -913,7 +669,4 @@ int lobby_screen(void) {
       return -1;
     }
   }
-
-  delwin(win);
-  return 0;
 }

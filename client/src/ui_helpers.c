@@ -18,13 +18,9 @@ void copy_default_or_input(const char *src, const char *fallback, char *dst,
                            size_t dst_sz) {
   if (dst == NULL || dst_sz == 0)
     return;
-  if (src == NULL || src[0] == '\0') {
-    strncpy(dst, fallback, dst_sz - 1);
-    dst[dst_sz - 1] = '\0';
-  } else {
-    strncpy(dst, src, dst_sz - 1);
-    dst[dst_sz - 1] = '\0';
-  }
+  const char *val = (src && src[0] != '\0') ? src : fallback;
+  strncpy(dst, val, dst_sz - 1);
+  dst[dst_sz - 1] = '\0';
 }
 
 void draw_centered_title(int screen_width, const char *title, int y) {

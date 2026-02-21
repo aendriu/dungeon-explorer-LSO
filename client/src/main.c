@@ -1,20 +1,17 @@
 #include "../header/connection.h"
 #include "../header/gui.h"
 #include "../header/mysignals.h"
-#include "../header/protocol.h"
-#include <signal.h>
+#include <ncurses.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <unistd.h>
 
 static int manage_choice(UserChoice *state);
 
-UserChoice choice;
-
-int main() {
+int main(void) {
   init_ncurses();
   install_signal_handlers();
 
+  UserChoice choice = MENU_ENTERLOBBY;
   while (client_running) {
     if (choice == MENU_ENTERLOBBY || choice == MENU_QUIT) {
       choice = welcome_menu();
