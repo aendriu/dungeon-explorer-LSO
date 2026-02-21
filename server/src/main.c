@@ -20,6 +20,17 @@ static void sig_handler(int sig) {
     server_running = 0;
 }
 
+/* Ogni secondo decrementa i countdown: se un player non si muove
+   per IDLE_THRESHOLD secondi, i mostri diventano piu' aggressivi */
+static void alarm_handler(int sig) {
+    (void)sig;
+    for (int i = 0; i < MAX_PLAYERS; i++) {
+        if (idle_countdown[i] > 0)
+            idle_countdown[i]--;
+    }
+    alarm(1);
+}
+
 static void install_signal_handlers(void) {
     struct sigaction sa;
     memset(&sa, 0, sizeof(sa));
@@ -28,6 +39,15 @@ static void install_signal_handlers(void) {
     sa.sa_flags = 0;
     sigaction(SIGINT, &sa, NULL);
     sigaction(SIGTERM, &sa, NULL);
+
+    /* SIGALRM per il timer idle dei player */
+    struct sigaction sa_alrm;
+    memset(&sa_alrm, 0, sizeof(sa_alrm));
+    sa_alrm.sa_handler = alarm_handler;
+    sigemptyset(&sa_alrm.sa_mask);
+    sa_alrm.sa_flags = SA_RESTART;
+    sigaction(SIGALRM, &sa_alrm, NULL);
+    alarm(1);
 }
 
 static void cleanup(void) {

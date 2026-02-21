@@ -3,9 +3,11 @@
 
 #include <stdbool.h>
 #include <pthread.h>
+#include <signal.h>
 #include "dungeon.h"
 
 #define FRAME_SIZE 4096
+#define IDLE_THRESHOLD 3
 
 extern Dungeon *game_dungeon;
 #define MAP_SIZE   10 // how many rooms
@@ -36,6 +38,10 @@ typedef struct {
 } Team;
 
 extern Team team;
+
+/* Countdown per-player: decrementato da SIGALRM ogni secondo.
+   Quando arriva a 0 il player e' considerato fermo. */
+extern volatile sig_atomic_t idle_countdown[MAX_PLAYERS];
 
 void  init_teams(void);
 

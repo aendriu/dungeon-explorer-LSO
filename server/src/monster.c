@@ -42,10 +42,11 @@ void room_assign_monsters_to_players(Room *r, int *player_ids, int num_players) 
 
 /* Muove i mostri che inseguono player_id di 1 passo verso il giocatore.
    Probabilita' di movimento: 1/3 -> 2/3 -> 3/3 (basato su failed_moves).
+   Se idle=true il player e' fermo da 3s, i mostri ottengono +1.
    Se un mostro raggiunge il player, viene catturato.
    Se trova un item normale, ci piazza una trappola.
    Ritorna il numero di catture. */
-int room_move_monsters_toward_player(Room *r, int player_id, int target_y, int target_x) {
+int room_move_monsters_toward_player(Room *r, int player_id, int target_y, int target_x, bool idle) {
     if (!r) return 0;
     int monster_kills = 0;
 
@@ -73,8 +74,9 @@ int room_move_monsters_toward_player(Room *r, int player_id, int target_y, int t
 
         if (r->monsters[oy][ox] != m) continue;
 
-        /* Probabilita' crescente: failed_moves=0 -> 1/3, =1 -> 2/3, =2 -> 3/3 */
-        int move_chance = m->failed_moves + 1;
+        /* Probabilita' crescente; +1 se il player e' fermo da 3s */
+        int move_chance = m->failed_moves + 1 + (idle ? 1 : 0);
+        if (move_chance > 3) move_chance = 3;
         int move_roll = (rand_r(seed) % 3) + 1;
 
         /* Movimento fallito, riprova piu' forte la prossima volta */

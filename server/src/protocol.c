@@ -123,8 +123,34 @@ static void handle_start_game(Conn *conn, char *response, size_t res_len) {
 
 static void handle_get_game_state(Conn *conn, char *response, size_t res_len) {
     init_game_state_if_needed();
+    const char *err = NULL;
     pthread_mutex_lock(&game_state.mutex);
-    char *json = build_game_state_json(conn->player_id, NULL);
+
+    int pid = conn->player_id;
+
+    /* Se il player e' fermo da 3s, i mostri nella sua stanza si muovono */
+    if (valid_pid(pid) && idle_countdown[pid] == 0 &&
+        game_state.positions[pid] >= 0 && game_dungeon != NULL) {
+        int rid = game_state.positions[pid];
+        Room *r = dungeon_get_room(game_dungeon, rid);
+        if (r != NULL) {
+            int hits = room_move_monsters_toward_player(
+                r, pid, game_state.pos_y[pid], game_state.pos_x[pid], true);
+            for (int h = 0; h < hits; h++)
+                player_lose_life();
+
+            /* Controlla fine partita */
+            pthread_mutex_lock(&team.lives_mutex);
+            int lives = team.shared_lives;
+            pthread_mutex_unlock(&team.lives_mutex);
+            if (lives <= 0) {
+                dungeon_kill_all_monsters(game_dungeon);
+                err = MSG_TEAM_DEFEATED;
+            }
+        }
+    }
+
+    char *json = build_game_state_json(pid, err);
     pthread_mutex_unlock(&game_state.mutex);
     copy_json_response(response, res_len, json);
 }
@@ -175,8 +201,9 @@ static const char *process_tile(int pid, Room *r, int x, int y) {
         player_kill_monster(pid);
     }
 
-    /* Mostri inseguono il giocatore */
-    int hits = room_move_monsters_toward_player(r, pid, y, x);
+    /* Mostri inseguono il giocatore (piu' aggressivi se fermo da 3s) */
+    bool player_idle = (idle_countdown[pid] == 0);
+    int hits = room_move_monsters_toward_player(r, pid, y, x, player_idle);
     for (int h = 0; h < hits; h++)
         player_lose_life();
 
@@ -218,6 +245,7 @@ static void handle_update_player_position(const ClientRequest *req, Conn *conn,
         } else {
             game_state.pos_y[pid] = req->pos_y;
             game_state.pos_x[pid] = req->pos_x;
+            idle_countdown[pid] = IDLE_THRESHOLD;
 
             if (r != NULL)
                 err = process_tile(pid, r, req->pos_x, req->pos_y);
@@ -250,6 +278,7 @@ static void handle_move_player(const ClientRequest *req, Conn *conn,
                        ? dungeon_get_room(game_dungeon, req->target_room) : NULL;
         game_state.pos_y[pid] = tr ? tr->height / 2 : 0;
         game_state.pos_x[pid] = tr ? tr->width  / 2 : 0;
+        idle_countdown[pid] = IDLE_THRESHOLD;
 
         if (tr != NULL)
             assign_room_monsters(tr, req->target_room);

@@ -10,6 +10,8 @@
 
 Dungeon *game_dungeon = NULL;
 
+volatile sig_atomic_t idle_countdown[MAX_PLAYERS] = {0};
+
 Team team = {
     .shared_lives = INITIAL_LIVES,
     .monsters_killed = 0,
@@ -97,6 +99,7 @@ void init_game_state_if_needed(void) {
             game_state.positions[i] = -1;
             game_state.pos_y[i]     = -1;
             game_state.pos_x[i]     = -1;
+            idle_countdown[i]       = IDLE_THRESHOLD;
         }
 
         if (game_dungeon != NULL) {
