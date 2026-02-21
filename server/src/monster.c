@@ -5,12 +5,15 @@
 #include "../header/monster.h"
 #include "../header/game_state.h"
 
+// Elimina e libera la memoria di tutti i mostri nel dungeon
 void dungeon_kill_all_monsters(Dungeon *d) {
     if (!d) return;
 
+    // Passa per ogni stanza nel dungeon
     for (int i = 0; i < d->num_rooms; i++) {
         Room *r = d->rooms[i];
         if (!r) continue;
+        // Elimina ogni mostro in ogni cella della stanza
         for (int y = 0; y < r->height; y++) {
             for (int x = 0; x < r->width; x++) {
                 free(r->monsters[y][x]);
@@ -27,14 +30,18 @@ void room_assign_monsters_to_players(Room *r, int *player_ids, int num_players) 
 
     unsigned int *seed = get_rand_seed();
 
+    // Scorre ogni cella della stanza
     for (int y = 0; y < r->height; y++) {
         for (int x = 0; x < r->width; x++) {
             Monster *m = r->monsters[y][x];
+            // Salta se non c'è mostro o è già morto
             if (m == NULL) continue;
             if (m->state == MONSTER_DEAD) continue;
 
+            // Assegna un giocatore casuale come bersaglio
             int chosen = player_ids[rand_r(seed) % num_players];
             m->target_player_id = chosen;
+            // Metti il mostro in inseguimento
             m->state = MONSTER_IN_PURSUIT;
         }
     }
