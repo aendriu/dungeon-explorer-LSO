@@ -6,6 +6,7 @@
 
 int y=0,x=0;
 
+/* Disegna e gestisce un menu testuale navigabile con frecce. */
 void menu() {
     int ch;
     int menu_y = (y/2) - 2;
@@ -41,6 +42,7 @@ void menu() {
 }
 
 
+/* Entry point demo ncurses: mostra input tastiera e apre il menu con 'm'. */
 int main() {
 
 	char ch;

@@ -15,6 +15,7 @@ Conn connections[MAX_PLAYERS] = {0};
 volatile sig_atomic_t server_running = 1;
 pthread_mutex_t conn_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+/* Handler di terminazione: ferma il loop principale del server. */
 static void sig_handler(int sig) {
     (void)sig;
     server_running = 0;
@@ -31,6 +32,7 @@ static void alarm_handler(int sig) {
     alarm(1);
 }
 
+/* Registra i signal handler di shutdown e del timer idle periodico. */
 static void install_signal_handlers(void) {
     struct sigaction sa;
     memset(&sa, 0, sizeof(sa));
@@ -50,6 +52,7 @@ static void install_signal_handlers(void) {
     alarm(1);
 }
 
+/* Rilascia risorse globali di rete e dungeon prima dell'uscita. */
 static void cleanup(void) {
     if (game_dungeon != NULL) {
         dungeon_destroy(game_dungeon);
@@ -59,6 +62,7 @@ static void cleanup(void) {
     sockets_free(connections, MAX_PLAYERS);
 }
 
+/* Stampa gli IP locali IPv4 utili per connettersi al server. */
 static void print_local_ips(void) {
     struct ifaddrs *ifaddr, *ifa;
     if (getifaddrs(&ifaddr) == -1) {
@@ -78,6 +82,7 @@ static void print_local_ips(void) {
     freeifaddrs(ifaddr);
 }
 
+/* Entry point del server: accetta connessioni fino a stop da segnale. */
 int main(void) {
     memset(connections, 0, sizeof(connections));
     memset(players, 0, sizeof(players));

@@ -9,6 +9,7 @@ pthread_mutex_t quest_items_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 /* ---------- Allocazione griglie per Room ---------- */
 
+/* Alloca e inizializza la griglia 2D degli item di una stanza. */
 static Item **alloc_item_grid(int width, int height) {
     Item **grid = malloc(height * sizeof(Item *));
     if (!grid) return NULL;
@@ -28,6 +29,7 @@ static Item **alloc_item_grid(int width, int height) {
     return grid;
 }
 
+/* Alloca la griglia 2D di puntatori a mostri, inizialmente tutti NULL. */
 static Monster ***alloc_monster_grid(int width, int height) {
     Monster ***grid = malloc(height * sizeof(Monster **));
     if (!grid) return NULL;
@@ -43,12 +45,14 @@ static Monster ***alloc_monster_grid(int width, int height) {
     return grid;
 }
 
+/* Libera la griglia item allocata con alloc_item_grid. */
 static void free_item_grid(Item **grid, int height) {
     if (!grid) return;
     for (int i = 0; i < height; i++) free(grid[i]);
     free(grid);
 }
 
+/* Libera mostri e struttura della griglia allocata con alloc_monster_grid. */
 static void free_monster_grid(Monster ***grid, int width, int height) {
     if (!grid) return;
     for (int y = 0; y < height; y++) {
@@ -60,6 +64,7 @@ static void free_monster_grid(Monster ***grid, int width, int height) {
 
 /* ---------- Room lifecycle ---------- */
 
+/* Crea una stanza con dimensioni date e relative griglie item/mostri. */
 Room* room_create(int id, int width, int height) {
     Room *r = malloc(sizeof(Room));
     if (!r) return NULL;
@@ -77,6 +82,7 @@ Room* room_create(int id, int width, int height) {
     return r;
 }
 
+/* Distrugge una stanza e tutte le sue risorse dinamiche interne. */
 void room_destroy(Room *r) {
     if (!r) return;
     free_item_grid(r->items, r->height);
@@ -93,6 +99,7 @@ static ItemType roll_item_type(unsigned int *seed) {
     return ITEM_NONE;
 }
 
+/* Applica tipo e stato di raccolta all'item di una specifica cella. */
 static void place_item(Item *item, ItemType type) {
     switch (type) {
     case ITEM_QUEST:
@@ -109,6 +116,7 @@ static void place_item(Item *item, ItemType type) {
     }
 }
 
+/* Popola tutta la stanza con item casuali. */
 static void room_generate_items(Room *r) {
     if (!r) return;
     unsigned int *seed = get_rand_seed();
@@ -151,6 +159,7 @@ static void room_generate_monsters(Room *r) {
     printf("- Room %d monsters generated (%dx%d)\n", r->id, r->width, r->height);
 }
 
+/* Esegue la popolazione completa della stanza (item + mostri). */
 static void room_populate(Room *r) {
     if (!r) return;
     room_generate_items(r);
@@ -215,6 +224,7 @@ Dungeon* dungeon_create(int num_rooms) {
     return d;
 }
 
+/* Libera tutte le stanze del dungeon e la struttura contenitore. */
 void dungeon_destroy(Dungeon *d) {
     if (!d) return;
     for (int i = 0; i < d->num_rooms; i++)
@@ -223,6 +233,7 @@ void dungeon_destroy(Dungeon *d) {
     free(d);  
 }
 
+/* Ritorna il puntatore alla stanza richiesta, oppure NULL se invalida. */
 Room* dungeon_get_room(Dungeon *d, int room_id) {
     if (!d || room_id < 0 || room_id >= d->num_rooms)
         return NULL;

@@ -10,6 +10,10 @@
 
 int start_y, start_x;
 
+/*
+ * Traduce un tasto premuto in delta di movimento (dy, dx).
+ * Supporta WASD e frecce; ritorna false se il tasto non e' di movimento.
+ */
 static bool is_move_key(int ch, int *dy, int *dx) {
   *dy = 0;
   *dx = 0;
@@ -29,6 +33,10 @@ static bool is_move_key(int ch, int *dy, int *dx) {
 static void render_minimap(WINDOW *win, const GameState *state, int top, int left);
 static int show_end_stats(const GameState *state, bool won);
 
+/*
+ * Disegna la stanza corrente: muri, porte, item/mostri e giocatori.
+ * Mostra anche HUD testuale e minimappa laterale.
+ */
 static void render_room(WINDOW *win, const GameState *state, int py, int px,
                         const char *msg) {
   int win_h, win_w;
@@ -148,6 +156,7 @@ static void render_room(WINDOW *win, const GameState *state, int py, int px,
       }
 
       if (!placed) {
+        /* Fallback finale: cerca la prima cella interna libera nella stanza. */
         for (int y = 1; y < rh - 1 && !placed; y++) {
           for (int x = 1; x < rw - 1; x++) {
             if (!occupied[y][x]) {
@@ -173,6 +182,9 @@ static void render_room(WINDOW *win, const GameState *state, int py, int px,
   render_minimap(win, state, top, left);
 }
 
+/*
+ * Renderizza una minimappa 2x5 con evidenza della stanza corrente e adiacenze.
+ */
 static void render_minimap(WINDOW *win, const GameState *state, int top, int left) {
   int mx = left + state->room_w + 3;
   int my = top;
@@ -237,6 +249,7 @@ static void render_minimap(WINDOW *win, const GameState *state, int top, int lef
   mvwprintw(win, my, mx, "Vite:  %d", state->team_lives);
 }
 
+/* Ridisegna l'intera schermata di gioco su finestra ncurses. */
 static void render_game(WINDOW *win, const GameState *state, int py, int px,
                         const char *msg) {
   werase(win);
@@ -254,6 +267,9 @@ static int check_game_over(const GameState *state) {
   return 0;
 }
 
+/*
+ * Mostra la schermata finale con statistiche personali/team e scelta replay.
+ */
 static int show_end_stats(const GameState *state, bool won) {
   WINDOW *win = newwin(0, 0, 0, 0);
   const char *title = won ? "HAI VINTO!" : "SCONFITTA!";
@@ -296,6 +312,10 @@ static int show_end_stats(const GameState *state, bool won) {
   return 0;
 }
 
+/*
+ * Loop principale della partita: input utente, sync con poller e rendering.
+ * Ritorna 2 se il player vuole rigiocare, 1 se esce dopo game over, 0 se quit.
+ */
 static int game_screen(GameState *state) {
   int win_h = start_y - 2;
   int win_w = start_x - 2;
@@ -394,6 +414,7 @@ static int game_screen(GameState *state) {
   return 0;
 }
 
+/* Inizializza ncurses e salva la dimensione iniziale dello schermo. */
 void init_ncurses(void) {
   initscr();
   cbreak();
@@ -537,6 +558,9 @@ int prompt_server_address(char *host, size_t host_sz, char *port,
   return 0;
 }
 
+/*
+ * Gestisce la lobby: polling dei player connessi, avvio partita e retry.
+ */
 int lobby_screen(void) {
   int my_player_id = -1;
   getmaxyx(stdscr, start_y, start_x);

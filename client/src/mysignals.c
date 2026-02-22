@@ -5,6 +5,7 @@
 /* Flag per il loop principale: 0 = esci */
 volatile sig_atomic_t client_running = 1;
 
+/* Handler minimale: alla ricezione segnale termina il loop client. */
 static void sig_handler(int sig) {
     (void)sig;
     client_running = 0;

@@ -65,6 +65,7 @@ void generateRandomMap(uint[MAP_SIZE][MAP_SIZE]);
 
 /* *************************************************************************** */
 
+/* Stampa la matrice di adiacenza della mappa stanza per stanza. */
 void printMap(uint map[MAP_SIZE][MAP_SIZE]) {
     for (int i = 0; i < MAP_SIZE; i++) {
         for (int j = 0; j < MAP_SIZE; j++) {
@@ -74,17 +75,20 @@ void printMap(uint map[MAP_SIZE][MAP_SIZE]) {
     }
 }
 
+/* Aggiunge un collegamento bidirezionale tra due stanze. */
 void addCorridor(uint map[MAP_SIZE][MAP_SIZE], uint i, uint j) {
     map[i][j] = 1;
     map[j][i] = 1;
 }
 
+/* Ritorna un id stanza casuale nel range [0, MAP_SIZE). */
 uint randRoom() {
     return rand() % MAP_SIZE;
 }
 
 // ***** [ ADJ ]
 
+/* Costruisce e ritorna l'array delle stanze adiacenti a room. */
 uint *getAdj(uint map[MAP_SIZE][MAP_SIZE], uint room) {
     uint *adjs = (uint*)malloc(countAjd(map, room) * sizeof(uint));    
     for(int i = 0, j = 0; i < MAP_SIZE; i++) {
@@ -96,6 +100,7 @@ uint *getAdj(uint map[MAP_SIZE][MAP_SIZE], uint room) {
     return adjs;
 }
 
+/* Conta quante stanze sono adiacenti alla stanza data. */
 uint countAjd(uint map[MAP_SIZE][MAP_SIZE], uint room) {
     uint counter = 0;
     for (int i = 0; i < MAP_SIZE; i++) {
@@ -104,6 +109,7 @@ uint countAjd(uint map[MAP_SIZE][MAP_SIZE], uint room) {
     return counter;
 }
 
+/* Mostra a video l'elenco delle stanze adiacenti alla stanza corrente. */
 void showAdj(uint map[MAP_SIZE][MAP_SIZE], uint room) {
     uint *adjs = getAdj(map,room);
     printf("stanza (%d), adiacenti : "GREEN" ", room);
@@ -113,12 +119,14 @@ void showAdj(uint map[MAP_SIZE][MAP_SIZE], uint room) {
 
 // ***** [ GAME RELATED ]
 
+/* Chiede all'utente la prossima stanza e aggiorna current_room. */
 void askNextRoom(uint map[MAP_SIZE][MAP_SIZE]) {
     printf("In questo momento ti trovi nella stanza %d, dove vuoi muoverti?\n", current_room);
     showAdj(map, current_room);
     scanf("%d", &current_room);
 }
 
+/* Genera casualmente alcuni corridoi della mappa di test. */
 void generateRandomMap(uint map[MAP_SIZE][MAP_SIZE]) {
     uint rooms_number = (rand() % MAP_SIZE) * (MAP_SIZE - (MAP_SIZE - DIFFICULTY));
     printf("Stanze da generare: %d\n", rooms_number);
@@ -131,6 +139,7 @@ void generateRandomMap(uint map[MAP_SIZE][MAP_SIZE]) {
 /* *************************************************************************** */
 
 
+/* Entry point del playground: genera mappa casuale e ciclo input utente. */
 int main() {
     int seed = (int)time(NULL);
     srand(seed);

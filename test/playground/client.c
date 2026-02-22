@@ -20,6 +20,7 @@
 #define MAXDATASIZE 100 // max number of bytes we can get at once 
 
 // get sockaddr, IPv4 or IPv6:
+/* Estrae il puntatore all'indirizzo IP da sockaddr (IPv4/IPv6). */
 void *get_in_addr(struct sockaddr *sa)
 {
 	if (sa->sa_family == AF_INET) {
@@ -29,6 +30,7 @@ void *get_in_addr(struct sockaddr *sa)
 	return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
 
+/* Client demo: si connette al server, riceve una stringa e la stampa. */
 int main(int argc, char *argv[])
 {
 	int sockfd, numbytes;  

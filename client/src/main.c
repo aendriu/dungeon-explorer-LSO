@@ -7,6 +7,9 @@
 
 static int manage_choice(UserChoice *state);
 
+/*
+ * Entry point del client: inizializza UI/segnali e gestisce il ciclo menu-lobby.
+ */
 int main(void) {
   init_ncurses();
   install_signal_handlers();
@@ -36,6 +39,10 @@ int main(void) {
   return 0;
 }
 
+/*
+ * Traduce la scelta corrente del menu in un'azione concreta.
+ * Ritorna -1 quando va terminata l'applicazione.
+ */
 static int manage_choice(UserChoice *state) {
   switch (*state) {
   case MENU_ENTERLOBBY: {

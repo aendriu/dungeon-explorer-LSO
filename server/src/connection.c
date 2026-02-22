@@ -93,6 +93,7 @@ int socket_create() {
     return sockfd;
 }
 
+// Associa il socket all'indirizzo/porta risolti da servinfo
 void socket_bind(int sockfd) {
     int res = bind(sockfd, servinfo->ai_addr, servinfo->ai_addrlen);
     if(res == -1) {

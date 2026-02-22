@@ -22,12 +22,14 @@
 #define BACKLOG 10   // how many pending connections queue will hold
 
 
+/* Worker thread demo: stampa un valore ricevuto in argomento. */
 void* handle_player(void* arg) {
 	printf("Handling player... value = %d", *((int*)(arg)));
 }
 
 
 
+/* Estrae il puntatore all'indirizzo IP da sockaddr (IPv4/IPv6). */
 void *get_in_addr(struct sockaddr *sa)
 {
     if (sa->sa_family == AF_INET) {
@@ -40,6 +42,7 @@ void *get_in_addr(struct sockaddr *sa)
 
 /* ************************************************** */
 
+/* Server demo: crea listener TCP, accetta connessioni e invia "Hello, world!". */
 int main(int argc, char* argv[]) {
 
 	int sockfd, new_fd;

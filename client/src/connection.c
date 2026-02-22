@@ -35,6 +35,7 @@ static void init_servinfo(const char *host, const char *port) {
     }
 }
 
+/* Crea il socket TCP usando i parametri risolti in servinfo */
 static void socket_create(void) {
     sock = socket(servinfo->ai_family, servinfo->ai_socktype, servinfo->ai_protocol);
     if( sock == -1 ) {

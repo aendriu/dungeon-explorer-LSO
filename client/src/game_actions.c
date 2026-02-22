@@ -87,8 +87,8 @@ int action_poll_state(GameState *s, char *st, size_t slen, int *py, int *px) {
 }
 
 /*
- * Richiede al server di spostare il player in una stanza specifica (quando vai alla porta della vecchia).
- * Imposta una posizione di default al centro prima di applicare la risposta.
+ * Richiede al server di spostare il player in una stanza specifica.
+ * Imposta una posizione di default al centro prima di applicare la risposta (sennò rischio che salta).
  */
 int action_move_to_room(GameState *s, int target, char *st, size_t slen,
                         int *py, int *px) {
