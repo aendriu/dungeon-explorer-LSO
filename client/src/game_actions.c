@@ -7,6 +7,11 @@
 
 /* ---- private helpers ---- */
 
+/*
+ * Allinea py/px con la posizione del player nello stato valido.
+ * Verifica che gli array pos_y/pos_x esistano, l'id sia valido e che
+ * la posizione sia dentro i bordi della stanza (escludendo i muri).
+ */
 static void sync_pos(const GameState *s, int *py, int *px) {
   if (s->pos_y && s->pos_x && s->player_id >= 0 &&
       s->player_id < MAX_PLAYERS) {
@@ -19,11 +24,20 @@ static void sync_pos(const GameState *s, int *py, int *px) {
   }
 }
 
+/*
+ * Allinea current_room con la stanza corrente del player.
+ * Richiede che la lista players sia presente e che player_id sia valido.
+ */
 static void sync_room(GameState *s) {
   if (s->players && s->player_id >= 0 && s->player_id < MAX_PLAYERS)
     s->current_room = s->players[s->player_id];
 }
 
+/*
+ * Applica la risposta del server allo stato.
+ * Effettua il parsing, sostituisce lo stato precedente e aggiorna stanza/pos.
+ * Converte eventuali eventi testuali in messaggio leggibile per l'utente (sta dentro pe).
+ */
 static int apply_reply(GameState *state, char *reply, char *st, size_t slen,
                        int *py, int *px) {
   GameState u = {0};
@@ -34,6 +48,7 @@ static int apply_reply(GameState *state, char *reply, char *st, size_t slen,
     return -1;
   }
   free(reply);
+  //libero lo stato precedente e sostituisco con quello nuovo, poi aggiorno stanza/posizione
   free_game_state(state);
   *state = u;
   sync_room(state);
@@ -58,6 +73,10 @@ static int apply_reply(GameState *state, char *reply, char *st, size_t slen,
 
 /* ---- public: game loop ---- */
 
+/*
+ * Chiede lo stato al server con GET_GAME_STATE.
+ * Se la risposta e' valida, applica lo stato e aggiorna posizione/messaggio.
+ */
 int action_poll_state(GameState *s, char *st, size_t slen, int *py, int *px) {
   char *r = sendnrecv(GET_GAME_STATE);
   if (!r) {
@@ -67,6 +86,10 @@ int action_poll_state(GameState *s, char *st, size_t slen, int *py, int *px) {
   return apply_reply(s, r, st, slen, py, px);
 }
 
+/*
+ * Richiede al server di spostare il player in una stanza specifica (quando vai alla porta della vecchia).
+ * Imposta una posizione di default al centro prima di applicare la risposta.
+ */
 int action_move_to_room(GameState *s, int target, char *st, size_t slen,
                         int *py, int *px) {
   char buf[64];
@@ -76,11 +99,16 @@ int action_move_to_room(GameState *s, int target, char *st, size_t slen,
     snprintf(st, slen, "Server non risponde");
     return -1;
   }
+  //posizione provissoria (per sicurezza sennò salta tutto)
   *py = s->room_h / 2;
   *px = s->room_w / 2;
   return apply_reply(s, r, st, slen, py, px);
 }
 
+/*
+ * Invia la nuova posizione del player al server.
+ * Se il server risponde, aggiorna lo stato locale tramite apply_reply.
+ */
 int action_update_pos(GameState *s, int y, int x, char *st, size_t slen,
                       int *py, int *px) {
   char buf[64];
@@ -95,6 +123,10 @@ int action_update_pos(GameState *s, int y, int x, char *st, size_t slen,
 
 /* ---- public: lobby ---- */
 
+/*
+ * Richiede al server il numero di player connessi.
+ * Valida la risposta numerica e gestisce errori di parsing o range.
+ */
 int action_poll_lobby(char *err, size_t elen) {
   char *reply = sendnrecv(GET_N_OF_CONNECTED_PLAYERS);
   if (!reply) {
@@ -112,6 +144,10 @@ int action_poll_lobby(char *err, size_t elen) {
   return (int)n;
 }
 
+/*
+ * Richiede l'avvio partita e riempie lo stato iniziale.
+ * Controlla errori del server, parsing e ripulisce lo stato in caso di errore.
+ */
 int action_start_game(GameState *out, char *err, size_t elen) {
   char *reply = sendnrecv(START_GAME);
   if (!reply) {
@@ -139,6 +175,7 @@ int action_start_game(GameState *out, char *err, size_t elen) {
 /* ---- poller thread ---- */
 
 /* Thread: ogni ~500ms chiede GET_GAME_STATE e aggiorna lo stato condiviso */
+/* Ciclo del thread poller: aggiorna periodicamente lo stato condiviso. */
 static void *poller_fn(void *arg) {
   Poller *p = (Poller *)arg;
   while (p->running) {
@@ -148,11 +185,13 @@ static void *poller_fn(void *arg) {
     if (!p->running)
       break;
 
+    /* Richiesta non bloccante dello stato corrente al server. */
     char *r = sendnrecv(GET_GAME_STATE);
     if (!r)
       continue;
 
     GameState tmp = {0};
+    /* Se il parsing fallisce, ignora questo giro di polling. */
     if (parse_game_state(r, &tmp, NULL, 0) < 0) {
       free(r);
       continue;
@@ -160,7 +199,7 @@ static void *poller_fn(void *arg) {
     free(r);
     sync_room(&tmp);
 
-    /* Swap dello stato condiviso sotto mutex */
+    /* Swap dello stato condiviso sotto mutex per consistenza. */
     pthread_mutex_lock(&p->mutex);
     int py = p->py, px = p->px;
     sync_pos(&tmp, &py, &px);
@@ -174,6 +213,10 @@ static void *poller_fn(void *arg) {
 }
 
 /* Avvia il poller, trasferisce ownership dello stato iniziale */
+/*
+ * Inizializza il poller e lancia il thread di polling.
+ * Trasferisce ownership dello stato iniziale nel poller.
+ */
 void poller_start(Poller *p, GameState *initial, int py, int px) {
   memset(p, 0, sizeof(*p));
   pthread_mutex_init(&p->mutex, NULL);
@@ -186,6 +229,10 @@ void poller_start(Poller *p, GameState *initial, int py, int px) {
 }
 
 /* Ferma il poller e restituisce lo stato finale */
+/*
+ * Arresta il poller e restituisce lo stato condiviso aggiornato.
+ * Attende la terminazione del thread e libera il mutex.
+ */
 void poller_stop(Poller *p, GameState *out) {
   p->running = 0;
   pthread_join(p->tid, NULL);

@@ -81,14 +81,14 @@ static char *sendnrecv_frame(const char *frame) {
   return result;
 }
 
-/* Invia un comando (intero) al server, ritorna la risposta (da free-are) */
+/* Invia un comando (sotto forma di messaggio) al server, ritorna la risposta  */
 char *sendnrecv(Message msg) {
   char frame[16];
   snprintf(frame, sizeof(frame), "%d", msg);
   return sendnrecv_frame(frame);
 }
 
-/* Invia un comando con payload JSON, ritorna la risposta (da free-are) */
+/* Invia un comando con payload JSON (sotto forma di messaggio), ritorna la risposta  */
 char *sendnrecv_payload(Message msg, const char *payload_json) {
   char frame[256];
   

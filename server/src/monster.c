@@ -43,16 +43,16 @@ void room_assign_monsters_to_players(Room *r, int *player_ids, int num_players) 
 /* Muove i mostri che inseguono player_id di 1 passo verso il giocatore.
    Probabilita' di movimento: 1/3 -> 2/3 -> 3/3 (basato su failed_moves).
    Se idle=true il player e' fermo da 3s, i mostri ottengono +1.
-   Se un mostro raggiunge il player, viene catturato.
+   Se un mostro raggiunge il player, viene danneggiato (-1 vita team).
    Se trova un item normale, ci piazza una trappola.
    Ritorna il numero di catture. */
 int room_move_monsters_toward_player(Room *r, int player_id, int target_y, int target_x, bool idle) {
     if (!r) return 0;
-    int monster_kills = 0;
+    int ouch_monster_hit_me = 0;
 
     unsigned int *seed = get_rand_seed();
 
-    /* Prima passata: raccoglie i mostri da muovere */
+    /* Prima passata: raccoglie i mostri da muovere è momentanea*/
     typedef struct { int oy, ox; Monster *m; } PendingMove;
     PendingMove pending[r->height * r->width];
     int n = 0;
@@ -101,7 +101,7 @@ int room_move_monsters_toward_player(Room *r, int player_id, int target_y, int t
         if (new_x == target_x && new_y == target_y) {
             r->monsters[oy][ox] = NULL;
             free(m);
-            monster_kills++;
+            ouch_monster_hit_me++;
             continue;
         }
 
@@ -121,5 +121,5 @@ int room_move_monsters_toward_player(Room *r, int player_id, int target_y, int t
         }
     }
 
-    return monster_kills;
+    return ouch_monster_hit_me;
 }

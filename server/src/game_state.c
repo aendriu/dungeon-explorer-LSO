@@ -8,18 +8,23 @@
 #include <string.h>
 #include <time.h>
 
+/* Dungeon globale: contiene stanze, item e mostri correnti della partita. */
 Dungeon *game_dungeon = NULL;
 
+/* Contatori di inattivita' per player (usati da logica di timeout/idle). */
 volatile sig_atomic_t idle_countdown[MAX_PLAYERS] = {0};
 
+/* Stato condiviso del team: vite condivise e kill totali. */
 Team team = {
     .shared_lives = INITIAL_LIVES,
     .monsters_killed = 0,
     .lives_mutex  = PTHREAD_MUTEX_INITIALIZER
 };
 
+/* Seed PRNG usato da rand_r per mappe/posizionamenti deterministici. */
 static unsigned int g_rand_seed = 0;
 
+/* Stato globale della partita lato server, protetto da mutex. */
 GameState game_state = {
     .map_size   = MAP_SIZE,
     .map        = {{0}},
@@ -30,12 +35,20 @@ GameState game_state = {
     .mutex      = PTHREAD_MUTEX_INITIALIZER
 };
 
+/*
+ * Aggiunge un corridoio bidirezionale tra le stanze i e j.
+ * La matrice e' simmetrica, quindi imposta map[i][j] e map[j][i].
+ */
 static void add_corridor(int map[MAP_SIZE][MAP_SIZE], int i, int j) {
     if (i == j) return;
     map[i][j] = 1;
     map[j][i] = 1;
 }
 
+/*
+ * Mescola un array con Fisher-Yates usando rand_r (thread-safe con seed locale).
+ * Non modifica elementi fuori dai primi n.
+ */
 static void shuffle(int *arr, int n) {
     for (int i = n - 1; i > 0; i--) {
         int j = rand_r(&g_rand_seed) % (i + 1);
@@ -43,11 +56,19 @@ static void shuffle(int *arr, int n) {
     }
 }
 
+/*
+ * Costruisce un ordine casuale di stanze.
+ * Mantiene la stanza 0 come punto fisso (start) e mescola le altre.
+ */
 static void build_random_order(int order[MAP_SIZE]) {
     for (int i = 0; i < MAP_SIZE; i++) order[i] = i;
     shuffle(order + 1, MAP_SIZE - 1);
 }
 
+/*
+ * Genera una mappa connessa creando una catena tra stanze in ordine casuale.
+ * Garantisce che ogni stanza sia raggiungibile da qualsiasi altra.
+ */
 static void generate_random_map(int map[MAP_SIZE][MAP_SIZE]) {
     int order[MAP_SIZE];
     build_random_order(order);
@@ -59,6 +80,10 @@ static void generate_random_map(int map[MAP_SIZE][MAP_SIZE]) {
 
 }
 
+/*
+ * Inizializza le statistiche del team per una nuova partita.
+ * Usa mutex per proteggere le vite condivise.
+ */
 void init_teams(void) {
     pthread_mutex_lock(&team.lives_mutex);
     team.shared_lives = INITIAL_LIVES;
@@ -67,10 +92,15 @@ void init_teams(void) {
     printf("- team initialized with %d shared lives\n", INITIAL_LIVES);
 }
 
+/* Espone il seed globale per inizializzazioni esterne (es. spawn). */
 unsigned int *get_rand_seed(void) {
     return &g_rand_seed;
 }
 
+/*
+ * Inizializza o resetta lo stato di gioco se la partita non e' avviata
+ * o se e' terminata (vite a 0 o quest completata).
+ */
 void init_game_state_if_needed(void) {
     pthread_mutex_lock(&game_state.mutex);
 
@@ -92,6 +122,7 @@ void init_game_state_if_needed(void) {
     }
 
     if (!game_state.started) {
+        /* Seed basato sul tempo per variare la mappa tra partite. */
         g_rand_seed = (unsigned int)time(NULL);
         memset(game_state.map, 0, sizeof(game_state.map));
         generate_random_map(game_state.map);
@@ -99,6 +130,7 @@ void init_game_state_if_needed(void) {
             game_state.positions[i] = -1;
             game_state.pos_y[i]     = -1;
             game_state.pos_x[i]     = -1;
+            /* Reset contatore inattivita' del player. */
             idle_countdown[i]       = IDLE_THRESHOLD;
         }
 
@@ -106,6 +138,7 @@ void init_game_state_if_needed(void) {
             dungeon_destroy(game_dungeon);
             game_dungeon = NULL;
         }
+        /* Ricrea dungeon coerente con la nuova mappa. */
         game_dungeon = dungeon_create(MAP_SIZE);
         quest_items_collected = 0;
 
@@ -117,6 +150,10 @@ void init_game_state_if_needed(void) {
 
 /* ---------- JSON helpers per build_game_state_json ---------- */
 
+/*
+ * Aggiunge l'array "players": stanza corrente di ogni player.
+ * Usa game_state.positions come sorgente.
+ */
 static void json_add_player_positions(cJSON *root) {
     cJSON *arr = cJSON_AddArrayToObject(root, "players");
     if (arr == NULL) return;
@@ -124,6 +161,10 @@ static void json_add_player_positions(cJSON *root) {
         cJSON_AddItemToArray(arr, cJSON_CreateNumber(game_state.positions[i]));
 }
 
+/*
+ * Aggiunge l'array "pos": coppie (y,x) per ogni player.
+ * Anche coordinate -1 vengono incluse per player assenti.
+ */
 static void json_add_player_coords(cJSON *root) {
     cJSON *pos = cJSON_AddArrayToObject(root, "pos");
     if (pos == NULL) return;
@@ -136,6 +177,10 @@ static void json_add_player_coords(cJSON *root) {
     }
 }
 
+/*
+ * Aggiunge la matrice di adiacenza "adj" della mappa.
+ * Ogni riga contiene 0/1 che indicano i corridoi tra stanze.
+ */
 static void json_add_adjacency(cJSON *root) {
     cJSON *adj = cJSON_AddArrayToObject(root, "adj");
     if (adj == NULL) return;
@@ -148,6 +193,11 @@ static void json_add_adjacency(cJSON *root) {
     }
 }
 
+/*
+ * Codifica un item in un valore numerico per il client:
+ * 0=vuoto/collected, 1=item normale o quest (nascosto),
+ * 3=trappola/booby, 4=mela.
+ */
 static int item_to_val(const Item *it) {
     if (it->collected || it->type == ITEM_NONE) return 0;
     if (it->type == ITEM_QUEST) return 1;  /* nascosto come item normale */
@@ -156,6 +206,10 @@ static int item_to_val(const Item *it) {
     return 1;
 }
 
+/*
+ * Aggiunge informazioni della stanza corrente:
+ * dimensioni e griglie di item e mostri visibili.
+ */
 static void json_add_room(cJSON *root, int room_id) {
     if (game_dungeon == NULL) return;
 
@@ -191,6 +245,10 @@ static void json_add_room(cJSON *root, int room_id) {
     }
 }
 
+/*
+ * Aggiunge statistiche aggregate del team.
+ * Usa mutex per proteggere accesso a quest_items e vite condivise.
+ */
 static void json_add_team_stats(cJSON *root) {
     pthread_mutex_lock(&quest_items_mutex);
     cJSON_AddNumberToObject(root, "quest_items_collected", quest_items_collected);
@@ -202,6 +260,10 @@ static void json_add_team_stats(cJSON *root) {
     pthread_mutex_unlock(&team.lives_mutex);
 }
 
+/*
+ * Aggiunge statistiche individuali del player.
+ * Se player_id non e' valido, scrive zeri per tutti i campi.
+ */
 static void json_add_player_stats(cJSON *root, int player_id) {
     cJSON *pstats = cJSON_AddObjectToObject(root, "player_stats");
     if (pstats == NULL) return;
@@ -227,10 +289,15 @@ static void json_add_player_stats(cJSON *root, int player_id) {
 
 /* ---------- build_game_state_json ---------- */
 
+/*
+ * Costruisce il JSON completo dello stato da inviare al client.
+ * Include mappa, posizioni, stanza corrente, statistiche e errori eventuali.
+ */
 char *build_game_state_json(int player_id, const char *error) {
     cJSON *root = cJSON_CreateObject();
     if (root == NULL) return NULL;
 
+    /* Se player_id e' invalido, current_room viene impostato a -1. */
     int cur = (player_id >= 0 && player_id < MAX_PLAYERS)
                   ? game_state.positions[player_id] : -1;
 

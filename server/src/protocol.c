@@ -9,6 +9,11 @@
 
 /* ========== Parsing della richiesta client ========== */
 
+/*
+ * Estrae dal payload JSON i campi opzionali:
+ * - target stanza per MOVE_PLAYER
+ * - coordinate y/x per UPDATE_PLAYER_POSITION
+ */
 static void parse_payload(cJSON *payload, ClientRequest *req) {
     cJSON *target = cJSON_GetObjectItemCaseSensitive(payload, "target");
     if (cJSON_IsNumber(target)) {
@@ -25,6 +30,10 @@ static void parse_payload(cJSON *payload, ClientRequest *req) {
     }
 }
 
+/*
+ * Parsa una richiesta JSON nella forma {"cmd":..., "payload":{...}}.
+ * Ignora campi mancanti e lascia i default gia' inizializzati in req.
+ */
 static void parse_json_request(const char *msg, ClientRequest *req) {
     cJSON *root = cJSON_Parse(msg);
     if (root == NULL) return;
@@ -40,6 +49,10 @@ static void parse_json_request(const char *msg, ClientRequest *req) {
     cJSON_Delete(root);
 }
 
+/*
+ * Entry-point di parsing: accetta sia JSON sia comandi numerici "grezzi".
+ * Ritorna sempre una struct valida con default sensati.
+ */
 ClientRequest parse_client_request(const char *msg) {
     ClientRequest req = {
         .cmd         = GET_N_OF_CONNECTED_PLAYERS,
@@ -65,6 +78,10 @@ ClientRequest parse_client_request(const char *msg) {
 
 /* ========== Utility di risposta ========== */
 
+/*
+ * Copia il JSON di risposta nel buffer di output.
+ * Gestisce null/overflow e libera la stringa allocata da cJSON.
+ */
 static int copy_json_response(char *response, size_t res_len, char *json) {
     if (json == NULL) {
         snprintf(response, res_len, "{\"error\":\"server_error\"}");
@@ -83,6 +100,10 @@ static int copy_json_response(char *response, size_t res_len, char *json) {
 
 /* ========== Handler dei comandi ========== */
 
+/*
+ * Assegna ai mostri della stanza un target casuale tra i player presenti.
+ * Viene invocato quando un player entra in una stanza.
+ */
 static void assign_room_monsters(Room *r, int room_id) {
     if (!r) return;
     int pids[MAX_PLAYERS];
@@ -95,18 +116,25 @@ static void assign_room_monsters(Room *r, int room_id) {
         room_assign_monsters_to_players(r, pids, np);
 }
 
+/* Ritorna true se pid e' dentro i limiti consentiti. */
 static bool valid_pid(int pid) {
     return pid >= 0 && pid < MAX_PLAYERS;
 }
 
+/* Handler per GET_N_OF_CONNECTED_PLAYERS: risposta solo numerica. */
 static void handle_get_connected_players(char *response, size_t res_len) {
     snprintf(response, res_len, "%d", get_connected_players());
 }
 
+/*
+ * Handler START_GAME: inizializza la partita se serve e spawna il player.
+ * Restituisce lo stato completo al client.
+ */
 static void handle_start_game(Conn *conn, char *response, size_t res_len) {
     init_game_state_if_needed();
     int pid = conn->player_id;
     pthread_mutex_lock(&game_state.mutex);
+    /* Se il player non ha ancora posizione, assegna la stanza iniziale. */
     if (valid_pid(pid) && game_state.positions[pid] < 0) {
         game_state.positions[pid] = 0;
         Room *spawn_room = dungeon_get_room(game_dungeon, 0);
@@ -121,6 +149,10 @@ static void handle_start_game(Conn *conn, char *response, size_t res_len) {
     copy_json_response(response, res_len, json);
 }
 
+/*
+ * Handler GET_GAME_STATE: aggiorna eventuali movimenti mostri e ritorna JSON.
+ * Se il player e' idle, i mostri della sua stanza avanzano.
+ */
 static void handle_get_game_state(Conn *conn, char *response, size_t res_len) {
     init_game_state_if_needed();
     const char *err = NULL;
@@ -128,7 +160,11 @@ static void handle_get_game_state(Conn *conn, char *response, size_t res_len) {
 
     int pid = conn->player_id;
 
-    /* Se il player e' fermo da 3s, i mostri nella sua stanza si muovono */
+    /*
+     * Idle mechanism: idle_countdown decrementa ogni secondo in main.c (SIGALRM).
+     * Quando idle_countdown[pid] == 0, il player e' fermo da IDLE_THRESHOLD (3s).
+     * Se fermo, i mostri nella sua stanza si muovono contro di lui.
+     */
     if (valid_pid(pid) && idle_countdown[pid] == 0 &&
         game_state.positions[pid] >= 0 && game_dungeon != NULL) {
         int rid = game_state.positions[pid];
@@ -136,6 +172,7 @@ static void handle_get_game_state(Conn *conn, char *response, size_t res_len) {
         if (r != NULL) {
             int hits = room_move_monsters_toward_player(
                 r, pid, game_state.pos_y[pid], game_state.pos_x[pid], true);
+            /* Ogni hit corrisponde a una vita persa dal team. */
             for (int h = 0; h < hits; h++)
                 player_lose_life();
 
@@ -155,6 +192,13 @@ static void handle_get_game_state(Conn *conn, char *response, size_t res_len) {
     copy_json_response(response, res_len, json);
 }
 
+/*
+ * Applica gli effetti della casella (x,y):
+ * - raccolta item
+ * - uccisione mostri presenti
+ * - movimento mostri verso il player
+ * Ritorna un eventuale messaggio di evento per il client.
+ */
 static const char *process_tile(int pid, Room *r, int x, int y) {
     const char *err = NULL;
     bool team_won = false;
@@ -202,8 +246,14 @@ static const char *process_tile(int pid, Room *r, int x, int y) {
     }
 
     /* Mostri inseguono il giocatore (piu' aggressivi se fermo da 3s) */
+    /*
+     * Idle mechanism: determina se il player e' fermo da 3 secondi.
+     * Se idle_countdown[pid] == 0, il player e' inattivo e i mostri
+     * ottengono un bonus di probabilita' nel movimento (vedi room_move_monsters_toward_player).
+     */
     bool player_idle = (idle_countdown[pid] == 0);
     int hits = room_move_monsters_toward_player(r, pid, y, x, player_idle);
+    /* Applica danno cumulativo dal numero di mostri che hanno catturato. */
     for (int h = 0; h < hits; h++)
         player_lose_life();
 
@@ -223,6 +273,10 @@ static const char *process_tile(int pid, Room *r, int x, int y) {
     return err;
 }
 
+/*
+ * Handler UPDATE_PLAYER_POSITION: valida coordinate e aggiorna lo stato.
+ * Se la casella contiene eventi, processa item/mostri e ritorna un messaggio.
+ */
 static void handle_update_player_position(const ClientRequest *req, Conn *conn,
                                           char *response, size_t res_len) {
     init_game_state_if_needed();
@@ -239,10 +293,18 @@ static void handle_update_player_position(const ClientRequest *req, Conn *conn,
         int rh = r ? r->height : 0;
         int rw = r ? r->width  : 0;
 
+        /* Coord fuori dai muri: rifiuta. */
         if (req->pos_y <= 0 || req->pos_y >= rh - 1 ||
             req->pos_x <= 0 || req->pos_x >= rw - 1) {
             err = MSG_INVALID_POS;
         } else {
+            /* Aggiorna posizione e resetta countdown idle. */
+            /*
+             * Resetta idle_countdown a IDLE_THRESHOLD (3) ogni volta che il
+             * player si muove. Questo fa ripartire il conteggio da 3 secondi.
+             * Se il player rimane fermo per 3s senza chiamare UPDATE_PLAYER_POSITION,
+             * idle_countdown arriva a 0 e i mostri diventano piu' aggressivi.
+             */
             game_state.pos_y[pid] = req->pos_y;
             game_state.pos_x[pid] = req->pos_x;
             idle_countdown[pid] = IDLE_THRESHOLD;
@@ -256,6 +318,10 @@ static void handle_update_player_position(const ClientRequest *req, Conn *conn,
     copy_json_response(response, res_len, json);
 }
 
+/*
+ * Handler MOVE_PLAYER: valida la stanza target e aggiorna la stanza corrente.
+ * Posiziona il player al centro della nuova stanza.
+ */
 static void handle_move_player(const ClientRequest *req, Conn *conn,
                                char *response, size_t res_len) {
     init_game_state_if_needed();
@@ -278,6 +344,11 @@ static void handle_move_player(const ClientRequest *req, Conn *conn,
                        ? dungeon_get_room(game_dungeon, req->target_room) : NULL;
         game_state.pos_y[pid] = tr ? tr->height / 2 : 0;
         game_state.pos_x[pid] = tr ? tr->width  / 2 : 0;
+        /*
+         * Resetta idle_countdown quando il player si sposta tra stanze.
+         * Questo assicura che ai mostri della nuova stanza sara' data opportunita'
+         * di movimento solo dopo altri 3 secondi di inattivita'.
+         */
         idle_countdown[pid] = IDLE_THRESHOLD;
 
         if (tr != NULL)
@@ -290,6 +361,10 @@ static void handle_move_player(const ClientRequest *req, Conn *conn,
 
 /* ========== Dispatcher e loop del player ========== */
 
+/*
+ * Dispatcha il comando verso l'handler corretto.
+ * Mantiene la logica di routing centralizzata.
+ */
 void manage_response(Message cmd, const ClientRequest *req, Conn *conn,
                      char *response, size_t res_len) {
     switch (cmd) {
@@ -311,6 +386,12 @@ void manage_response(Message cmd, const ClientRequest *req, Conn *conn,
     }
 }
 
+/*
+ * Thread principale per una connessione client:
+ * - riceve comandi
+ * - produce risposte
+ * - gestisce disconnessioni e pulizia stato
+ */
 void *handle_player(void *args) {
   Conn *myconn = (Conn *)args;
   printf("[SERVER] Handling player %d\n", myconn->player_id);
@@ -319,6 +400,7 @@ void *handle_player(void *args) {
     char msg[FRAME_SIZE];
     memset(msg, 0, sizeof(msg));
 
+    /* Ricezione bloccante della frame completa. */
     ssize_t r = recv(myconn->sockfd, msg, sizeof(msg), 0);
     if (r < 0) {
       if (errno == EINTR) continue;
@@ -329,14 +411,17 @@ void *handle_player(void *args) {
 
     char response[FRAME_SIZE];
     memset(response, 0, sizeof(response));
+    /* Parsing e dispatch del comando ricevuto. */
     ClientRequest req = parse_client_request(msg);
     manage_response(req.cmd, &req, myconn, response, sizeof(response));
 
-    if (send_all(myconn->sockfd, response, sizeof(response)) < 0)
+        /* Invio della risposta serializzata al client. */
+        if (send_all(myconn->sockfd, response, sizeof(response)) < 0)
       break;
   }
 
-  close(myconn->sockfd);
+    /* Cleanup connessione e stato player. */
+    close(myconn->sockfd);
   myconn->sockfd = 0;
 
   pthread_mutex_lock(&game_state.mutex);
