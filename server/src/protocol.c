@@ -37,7 +37,7 @@ static void parse_payload(cJSON *payload, ClientRequest *req) {
 static void parse_json_request(const char *msg, ClientRequest *req) {
     cJSON *root = cJSON_Parse(msg);
     if (root == NULL) return;
-
+//il comando è il messaggio nel JSON
     cJSON *cmd = cJSON_GetObjectItemCaseSensitive(root, "cmd");
     if (cJSON_IsNumber(cmd))
         req->cmd = (Message)cmd->valueint;
@@ -249,7 +249,7 @@ static const char *process_tile(int pid, Room *r, int x, int y) {
     /*
      * Idle mechanism: determina se il player e' fermo da 3 secondi.
      * Se idle_countdown[pid] == 0, il player e' inattivo e i mostri
-     * ottengono un bonus di probabilita' nel movimento (vedi room_move_monsters_toward_player).
+     * ottengono un bonus di movement opportunity (vedi room_move_monsters_toward_player).
      */
     bool player_idle = (idle_countdown[pid] == 0);
     int hits = room_move_monsters_toward_player(r, pid, y, x, player_idle);

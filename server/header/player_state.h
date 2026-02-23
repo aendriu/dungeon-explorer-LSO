@@ -3,7 +3,7 @@
 
 #include "dungeon.h"
 
-#define MAX_ITEMS_PER_PLAYER 25
+#define MAX_ITEMS_PER_PLAYER 50
 
 typedef struct {
     int player_id;

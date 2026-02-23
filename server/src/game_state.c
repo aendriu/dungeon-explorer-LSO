@@ -182,10 +182,10 @@ static void json_add_player_coords(cJSON *root) {
  * Ogni riga contiene 0/1 che indicano i corridoi tra stanze.
  */
 static void json_add_adjacency(cJSON *root) {
-    cJSON *adj = cJSON_AddArrayToObject(root, "adj");
+    cJSON *adj = cJSON_AddArrayToObject(root, "adj"); //crea un JSON array per la matrice di adiacenza
     if (adj == NULL) return;
     for (int i = 0; i < game_state.map_size; i++) {
-        cJSON *row = cJSON_CreateArray();
+        cJSON *row = cJSON_CreateArray(); //array vuoto per la riga i-esima
         if (row == NULL) return;
         for (int j = 0; j < game_state.map_size; j++)
             cJSON_AddItemToArray(row, cJSON_CreateNumber(game_state.map[i][j]));

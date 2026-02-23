@@ -10,7 +10,7 @@ typedef struct {
   int current_room;
   int player_id;
   int **adj;
-  int *players;
+  int *players; //è la posizione dei player nelle stanze non il loro numero
   int *pos_y;
   int *pos_x;
   int room_h;
