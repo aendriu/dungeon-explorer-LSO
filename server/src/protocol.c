@@ -330,14 +330,14 @@ static void handle_move_player(const ClientRequest *req, Conn *conn,
     pthread_mutex_lock(&game_state.mutex);
     int current = valid_pid(pid) ? game_state.positions[pid] : -1;
     if (!req || !req->has_target) {
-        err = "missing_target";
+        err = MSG_MISSING_TARGET;
     } else if (current < 0 || current >= game_state.map_size) {
-        err = "invalid_current_room";
+        err = MSG_INVALID_CURRENT_ROOM;
     } else if (req->target_room < 0 ||
                req->target_room >= game_state.map_size) {
-        err = "invalid_target";
+        err = MSG_INVALID_TARGET;
     } else if (game_state.map[current][req->target_room] == 0) {
-        err = "invalid_move";
+        err = MSG_INVALID_MOVE;
     } else {
         game_state.positions[pid] = req->target_room;
         Room *tr = (game_dungeon != NULL)
