@@ -291,9 +291,9 @@ static void json_add_player_stats(cJSON *root, int player_id) {
 
 /*
  * Costruisce il JSON completo dello stato da inviare al client.
- * Include mappa, posizioni, stanza corrente, statistiche e errori eventuali.
+ * Include mappa, posizioni, stanza corrente, statistiche ed eventuali eventi.
  */
-char *build_game_state_json(int player_id, const char *error) {
+char *build_game_state_json(int player_id, const char *event) {
     cJSON *root = cJSON_CreateObject();
     if (root == NULL) return NULL;
 
@@ -304,8 +304,8 @@ char *build_game_state_json(int player_id, const char *error) {
     cJSON_AddNumberToObject(root, "map_size",     game_state.map_size);
     cJSON_AddNumberToObject(root, "player_id",    player_id);
     cJSON_AddNumberToObject(root, "current_room", cur);
-    if (error != NULL)
-        cJSON_AddStringToObject(root, "error", error);
+    if (event != NULL)
+        cJSON_AddStringToObject(root, "event", event);
 
     json_add_player_positions(root);
     json_add_player_coords(root);

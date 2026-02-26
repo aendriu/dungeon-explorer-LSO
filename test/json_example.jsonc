@@ -4,8 +4,8 @@
     "map_size": 10,
     "player_id": 0,
     "current_room": 2,
-    // Possibili valori di "error":
-    //   null             → nessun errore
+    // Possibili valori di "event":
+    //   null             → nessun evento
     //   "TEAM_DEFEATED"  → il team ha perso tutte le vite
     //   "TEAM_WON"       → raccolti tutti e 3 i quest items
     //   "BOOBY_TRAP"     → il player ha calpestato una trappola esplosiva
@@ -20,7 +20,7 @@
     //   "INVALID_CURRENT_ROOM" → stanza corrente non valida
     //   "INVALID_TARGET"       → stanza target fuori range
     //   "INVALID_MOVE"         → nessun corridoio tra le due stanze
-    "error": null,
+    "event": null,
 
     // Stanza corrente di ogni player (max 4). -1 = non connesso
     "players": [2, 0, -1, -1],

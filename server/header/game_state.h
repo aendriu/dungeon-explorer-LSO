@@ -48,6 +48,6 @@ void  init_teams(void);
 void  init_game_state_if_needed(void);
 unsigned int *get_rand_seed(void);
 
-char *build_game_state_json(int player_id, const char *error);
+char *build_game_state_json(int player_id, const char *event);
 
 #endif

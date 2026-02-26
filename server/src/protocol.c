@@ -84,11 +84,11 @@ ClientRequest parse_client_request(const char *msg) {
  */
 static int copy_json_response(char *response, size_t res_len, char *json) {
     if (json == NULL) {
-        snprintf(response, res_len, "{\"error\":\"server_error\"}");
+        snprintf(response, res_len, "{\"event\":\"server_error\"}");
         return -1;
     }
     if (strlen(json) >= res_len) {
-        snprintf(response, res_len, "{\"error\":\"response_too_large\"}");
+        snprintf(response, res_len, "{\"event\":\"response_too_large\"}");
         cJSON_free(json);
         return -1;
     }
@@ -154,12 +154,12 @@ static void handle_start_game(Conn *conn, char *response, size_t res_len) {
  * Se il player e' idle, i mostri della sua stanza avanzano.
  */
 static void handle_get_game_state(Conn *conn, char *response, size_t res_len) {
-    const char *err = NULL;
+    const char *event = NULL;
     pthread_mutex_lock(&game_state.mutex);
 
     if (!game_state.started) {
         pthread_mutex_unlock(&game_state.mutex);
-        snprintf(response, res_len, "{\"error\":\"game_not_started\"}");
+        snprintf(response, res_len, "{\"event\":\"game_not_started\"}");
         return;
     }
 
@@ -170,11 +170,11 @@ static void handle_get_game_state(Conn *conn, char *response, size_t res_len) {
     int lives = team.shared_lives;
     pthread_mutex_unlock(&team.lives_mutex);
     if (lives <= 0) {
-        err = MSG_TEAM_DEFEATED;
+        event = MSG_TEAM_DEFEATED;
     } else {
         pthread_mutex_lock(&quest_items_mutex);
         if (quest_items_collected >= QUEST_ITEMS_TO_WIN)
-            err = MSG_TEAM_WON;
+            event = MSG_TEAM_WON;
         pthread_mutex_unlock(&quest_items_mutex);
     }
 
@@ -182,7 +182,7 @@ static void handle_get_game_state(Conn *conn, char *response, size_t res_len) {
      * Idle mechanism: solo se la partita e' ancora in corso.
      * Se il player e' fermo da IDLE_THRESHOLD secondi, i mostri avanzano.
      */
-    if (err == NULL && valid_pid(pid) && idle_countdown[pid] == 0 &&
+    if (event == NULL && valid_pid(pid) && idle_countdown[pid] == 0 &&
         game_state.positions[pid] >= 0 && game_dungeon != NULL) {
         int rid = game_state.positions[pid];
         Room *r = dungeon_get_room(game_dungeon, rid);
@@ -199,12 +199,12 @@ static void handle_get_game_state(Conn *conn, char *response, size_t res_len) {
             pthread_mutex_unlock(&team.lives_mutex);
             if (lives <= 0) {
                 dungeon_kill_all_monsters(game_dungeon);
-                err = MSG_TEAM_DEFEATED;
+                event = MSG_TEAM_DEFEATED;
             }
         }
     }
 
-    char *json = build_game_state_json(pid, err);
+    char *json = build_game_state_json(pid, event);
     pthread_mutex_unlock(&game_state.mutex);
     copy_json_response(response, res_len, json);
 }
@@ -217,7 +217,7 @@ static void handle_get_game_state(Conn *conn, char *response, size_t res_len) {
  * Ritorna un eventuale messaggio di evento per il client.
  */
 static const char *process_tile(int pid, Room *r, int x, int y) {
-    const char *err = NULL;
+    const char *event = NULL;
     bool team_won = false;
 
     /* Raccolta item */
@@ -230,12 +230,12 @@ static const char *process_tile(int pid, Room *r, int x, int y) {
             players[pid].traps_triggered++;
             player_lose_life();
             if (t == ITEM_BOOBYTRAP)
-                err = MSG_BOOBY_TRAP;
+                event = MSG_BOOBY_TRAP;
         } else if (t == ITEM_APPLE) {
             pthread_mutex_lock(&team.lives_mutex);
             team.shared_lives++;
             pthread_mutex_unlock(&team.lives_mutex);
-            err = MSG_APPLE_HEAL;
+            event = MSG_APPLE_HEAL;
         } else {
             Player *p = &players[pid];
             if (p->items_collected < MAX_ITEMS_PER_PLAYER) {
@@ -287,7 +287,7 @@ static const char *process_tile(int pid, Room *r, int x, int y) {
         return MSG_TEAM_DEFEATED;
     }
 
-    return err;
+    return event;
 }
 
 /*
@@ -296,7 +296,7 @@ static const char *process_tile(int pid, Room *r, int x, int y) {
  */
 static void handle_update_player_position(const ClientRequest *req, Conn *conn,
                                           char *response, size_t res_len) {
-    const char *err = NULL;
+    const char *event = NULL;
     pthread_mutex_lock(&game_state.mutex);
 
     /* Se la partita e' finita, ritorna lo stato con l'errore */
@@ -304,26 +304,26 @@ static void handle_update_player_position(const ClientRequest *req, Conn *conn,
     int lives = team.shared_lives;
     pthread_mutex_unlock(&team.lives_mutex);
     if (lives <= 0) {
-        err = MSG_TEAM_DEFEATED;
+        event = MSG_TEAM_DEFEATED;
     } else {
         pthread_mutex_lock(&quest_items_mutex);
         if (quest_items_collected >= QUEST_ITEMS_TO_WIN)
-            err = MSG_TEAM_WON;
+            event = MSG_TEAM_WON;
         pthread_mutex_unlock(&quest_items_mutex);
     }
 
-    if (err != NULL) {
+    if (event != NULL) {
         /* Partita finita: non processare azioni, ritorna solo lo stato */
-        char *json = build_game_state_json(conn->player_id, err);
+        char *json = build_game_state_json(conn->player_id, event);
         pthread_mutex_unlock(&game_state.mutex);
         copy_json_response(response, res_len, json);
         return;
     }
 
     if (!valid_pid(conn->player_id)) {
-        err = MSG_INVALID_PLAYER;
+        event = MSG_INVALID_PLAYER;
     } else if (!req || !req->has_pos) {
-        err = MSG_MISSING_POS;
+        event = MSG_MISSING_POS;
     } else {
         int pid = conn->player_id;
         int rid = game_state.positions[pid];
@@ -334,7 +334,7 @@ static void handle_update_player_position(const ClientRequest *req, Conn *conn,
         /* Coord fuori dai muri: rifiuta. */
         if (req->pos_y <= 0 || req->pos_y >= rh - 1 ||
             req->pos_x <= 0 || req->pos_x >= rw - 1) {
-            err = MSG_INVALID_POS;
+            event = MSG_INVALID_POS;
         } else {
             /* Aggiorna posizione e resetta countdown idle. */
             /*
@@ -348,10 +348,10 @@ static void handle_update_player_position(const ClientRequest *req, Conn *conn,
             idle_countdown[pid] = IDLE_THRESHOLD;
 
             if (r != NULL)
-                err = process_tile(pid, r, req->pos_x, req->pos_y);
+                event = process_tile(pid, r, req->pos_x, req->pos_y);
         }
     }
-    char *json = build_game_state_json(conn->player_id, err);
+    char *json = build_game_state_json(conn->player_id, event);
     pthread_mutex_unlock(&game_state.mutex);
     copy_json_response(response, res_len, json);
 }
@@ -362,25 +362,25 @@ static void handle_update_player_position(const ClientRequest *req, Conn *conn,
  */
 static void handle_move_player(const ClientRequest *req, Conn *conn,
                                char *response, size_t res_len) {
-    const char *err = NULL;
+    const char *event = NULL;
     int pid = conn->player_id;
     pthread_mutex_lock(&game_state.mutex);
 
-    /* Se la partita e' finita, ritorna lo stato con l'errore */
+    /* Se la partita e' finita, ritorna lo stato con l'evento */
     pthread_mutex_lock(&team.lives_mutex);
     int lives = team.shared_lives;
     pthread_mutex_unlock(&team.lives_mutex);
     if (lives <= 0) {
-        err = MSG_TEAM_DEFEATED;
+        event = MSG_TEAM_DEFEATED;
     } else {
         pthread_mutex_lock(&quest_items_mutex);
         if (quest_items_collected >= QUEST_ITEMS_TO_WIN)
-            err = MSG_TEAM_WON;
+            event = MSG_TEAM_WON;
         pthread_mutex_unlock(&quest_items_mutex);
     }
 
-    if (err != NULL) {
-        char *json = build_game_state_json(pid, err);
+    if (event != NULL) {
+        char *json = build_game_state_json(pid, event);
         pthread_mutex_unlock(&game_state.mutex);
         copy_json_response(response, res_len, json);
         return;
@@ -388,14 +388,14 @@ static void handle_move_player(const ClientRequest *req, Conn *conn,
 
     int current = valid_pid(pid) ? game_state.positions[pid] : -1;
     if (!req || !req->has_target) {
-        err = MSG_MISSING_TARGET;
+        event = MSG_MISSING_TARGET;
     } else if (current < 0 || current >= game_state.map_size) {
-        err = MSG_INVALID_CURRENT_ROOM;
+        event = MSG_INVALID_CURRENT_ROOM;
     } else if (req->target_room < 0 ||
                req->target_room >= game_state.map_size) {
-        err = MSG_INVALID_TARGET;
+        event = MSG_INVALID_TARGET;
     } else if (game_state.map[current][req->target_room] == 0) {
-        err = MSG_INVALID_MOVE;
+        event = MSG_INVALID_MOVE;
     } else {
         game_state.positions[pid] = req->target_room;
         Room *tr = (game_dungeon != NULL)
@@ -412,7 +412,7 @@ static void handle_move_player(const ClientRequest *req, Conn *conn,
         if (tr != NULL)
             assign_room_monsters(tr, req->target_room);
     }
-    char *json = build_game_state_json(pid, err);
+    char *json = build_game_state_json(pid, event);
     pthread_mutex_unlock(&game_state.mutex);
     copy_json_response(response, res_len, json);
 }

@@ -34,14 +34,14 @@ void free_game_state(GameState *state) {
 /* ---------- JSON parse helpers ---------- */
 
 /*
- * Estrae eventuale stringa di errore dal JSON del server.
- * Se presente, copia in err_buf troncando a err_len.
+ * Estrae eventuale stringa di evento dal JSON del server.
+ * Se presente, copia in evt_buf troncando a evt_len.
  */
-static void parse_error(const cJSON *root, char *err_buf, size_t err_len) {
-  cJSON *err = cJSON_GetObjectItemCaseSensitive(root, "error");
-  if (cJSON_IsString(err) && err_buf != NULL && err_len > 0) {
-    strncpy(err_buf, err->valuestring, err_len - 1);
-    err_buf[err_len - 1] = '\0';
+static void parse_event(const cJSON *root, char *evt_buf, size_t evt_len) {
+  cJSON *evt = cJSON_GetObjectItemCaseSensitive(root, "event");
+  if (cJSON_IsString(evt) && evt_buf != NULL && evt_len > 0) {
+    strncpy(evt_buf, evt->valuestring, evt_len - 1);
+    evt_buf[evt_len - 1] = '\0';
   }
 }
 
@@ -255,7 +255,7 @@ int parse_game_state(const char *json, GameState *state, char *err_buf,
   if (root == NULL)
     return -1;
 
-  parse_error(root, err_buf, err_len);
+  parse_event(root, err_buf, err_len);
 
   /* Parsing dei campi obbligatori — se uno fallisce, pulizia e uscita */
   int ok = (parse_base_fields(root, state) == 0 &&
