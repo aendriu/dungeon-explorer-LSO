@@ -10,7 +10,7 @@
 #include <sys/socket.h>
 
 /* Dimensione frame di comunicazione (4 KB) */
-enum { CLIENT_FRAME_SIZE = 4096 };
+enum { CLIENT_FRAME_SIZE = 8192 };
 
 /* Mutex per accesso al socket tra main thread e poller */
 static pthread_mutex_t net_mutex = PTHREAD_MUTEX_INITIALIZER;

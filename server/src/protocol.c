@@ -154,18 +154,35 @@ static void handle_start_game(Conn *conn, char *response, size_t res_len) {
  * Se il player e' idle, i mostri della sua stanza avanzano.
  */
 static void handle_get_game_state(Conn *conn, char *response, size_t res_len) {
-    init_game_state_if_needed();
     const char *err = NULL;
     pthread_mutex_lock(&game_state.mutex);
 
+    if (!game_state.started) {
+        pthread_mutex_unlock(&game_state.mutex);
+        snprintf(response, res_len, "{\"error\":\"game_not_started\"}");
+        return;
+    }
+
     int pid = conn->player_id;
 
+    /* Controlla se la partita e' gia' finita */
+    pthread_mutex_lock(&team.lives_mutex);
+    int lives = team.shared_lives;
+    pthread_mutex_unlock(&team.lives_mutex);
+    if (lives <= 0) {
+        err = MSG_TEAM_DEFEATED;
+    } else {
+        pthread_mutex_lock(&quest_items_mutex);
+        if (quest_items_collected >= QUEST_ITEMS_TO_WIN)
+            err = MSG_TEAM_WON;
+        pthread_mutex_unlock(&quest_items_mutex);
+    }
+
     /*
-     * Idle mechanism: idle_countdown decrementa ogni secondo in main.c (SIGALRM).
-     * Quando idle_countdown[pid] == 0, il player e' fermo da IDLE_THRESHOLD (3s).
-     * Se fermo, i mostri nella sua stanza si muovono contro di lui.
+     * Idle mechanism: solo se la partita e' ancora in corso.
+     * Se il player e' fermo da IDLE_THRESHOLD secondi, i mostri avanzano.
      */
-    if (valid_pid(pid) && idle_countdown[pid] == 0 &&
+    if (err == NULL && valid_pid(pid) && idle_countdown[pid] == 0 &&
         game_state.positions[pid] >= 0 && game_dungeon != NULL) {
         int rid = game_state.positions[pid];
         Room *r = dungeon_get_room(game_dungeon, rid);
@@ -279,9 +296,30 @@ static const char *process_tile(int pid, Room *r, int x, int y) {
  */
 static void handle_update_player_position(const ClientRequest *req, Conn *conn,
                                           char *response, size_t res_len) {
-    init_game_state_if_needed();
     const char *err = NULL;
     pthread_mutex_lock(&game_state.mutex);
+
+    /* Se la partita e' finita, ritorna lo stato con l'errore */
+    pthread_mutex_lock(&team.lives_mutex);
+    int lives = team.shared_lives;
+    pthread_mutex_unlock(&team.lives_mutex);
+    if (lives <= 0) {
+        err = MSG_TEAM_DEFEATED;
+    } else {
+        pthread_mutex_lock(&quest_items_mutex);
+        if (quest_items_collected >= QUEST_ITEMS_TO_WIN)
+            err = MSG_TEAM_WON;
+        pthread_mutex_unlock(&quest_items_mutex);
+    }
+
+    if (err != NULL) {
+        /* Partita finita: non processare azioni, ritorna solo lo stato */
+        char *json = build_game_state_json(conn->player_id, err);
+        pthread_mutex_unlock(&game_state.mutex);
+        copy_json_response(response, res_len, json);
+        return;
+    }
+
     if (!valid_pid(conn->player_id)) {
         err = MSG_INVALID_PLAYER;
     } else if (!req || !req->has_pos) {
@@ -324,10 +362,30 @@ static void handle_update_player_position(const ClientRequest *req, Conn *conn,
  */
 static void handle_move_player(const ClientRequest *req, Conn *conn,
                                char *response, size_t res_len) {
-    init_game_state_if_needed();
     const char *err = NULL;
     int pid = conn->player_id;
     pthread_mutex_lock(&game_state.mutex);
+
+    /* Se la partita e' finita, ritorna lo stato con l'errore */
+    pthread_mutex_lock(&team.lives_mutex);
+    int lives = team.shared_lives;
+    pthread_mutex_unlock(&team.lives_mutex);
+    if (lives <= 0) {
+        err = MSG_TEAM_DEFEATED;
+    } else {
+        pthread_mutex_lock(&quest_items_mutex);
+        if (quest_items_collected >= QUEST_ITEMS_TO_WIN)
+            err = MSG_TEAM_WON;
+        pthread_mutex_unlock(&quest_items_mutex);
+    }
+
+    if (err != NULL) {
+        char *json = build_game_state_json(pid, err);
+        pthread_mutex_unlock(&game_state.mutex);
+        copy_json_response(response, res_len, json);
+        return;
+    }
+
     int current = valid_pid(pid) ? game_state.positions[pid] : -1;
     if (!req || !req->has_target) {
         err = MSG_MISSING_TARGET;
@@ -400,8 +458,11 @@ void *handle_player(void *args) {
     char msg[FRAME_SIZE];
     memset(msg, 0, sizeof(msg));
 
-    /* Ricezione bloccante della frame completa. */
-    ssize_t r = recv(myconn->sockfd, msg, sizeof(msg), 0);
+    /* 
+       MSG_WAITALL garantisce che recv torni solo quando ha letto
+       esattamente sizeof(msg) byte, evitando read parziali.
+    */
+    ssize_t r = recv(myconn->sockfd, msg, sizeof(msg), MSG_WAITALL);
     if (r < 0) {
       if (errno == EINTR) continue;
       perror("[server, recv, handle_player]");

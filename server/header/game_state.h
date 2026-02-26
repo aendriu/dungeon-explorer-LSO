@@ -6,7 +6,7 @@
 #include <signal.h>
 #include "dungeon.h"
 
-#define FRAME_SIZE 4096
+#define FRAME_SIZE 8192
 #define IDLE_THRESHOLD 3
 
 extern Dungeon *game_dungeon;
