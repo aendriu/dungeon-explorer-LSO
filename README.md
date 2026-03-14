@@ -3,7 +3,7 @@
 Gioco cooperativo multiplayer (fino a 4 giocatori) in cui si esplorano stanze di un dungeon generato casualmente, si raccolgono oggetti, si evitano trappole e si combattono mostri — il tutto da terminale con **ncurses**.
 
 > Progetto per il corso di **Laboratorio di Sistemi Operativi** — Università degli Studi di Napoli Federico II  
-> Autori: **Andrea Antimone di Luise** & **Adriano di Giovanni**
+> Autori: **Antimoandrea di Luise** & **Adriano di Giovanni**
 
 ---
 
